@@ -15,7 +15,7 @@ download the TypeScript compiler.
 ```
 varis-ts/
 ├── package.json            Private workspace root. Scripts run across packages.
-├── tsconfig.json           Shared compiler options. Both packages extend it.
+├── tsconfig.base.json      Shared compiler options. Both packages extend it.
 ├── openapi.yaml            The Varis API description.
 ├── packages/sdk/
 │   ├── src/index.ts        Varis, Services, and define.
