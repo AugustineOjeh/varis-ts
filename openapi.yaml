@@ -1,0 +1,1106 @@
+# =============================================================================
+# Varis API specification
+#
+# HOW TO READ THIS FILE
+#
+# An OpenAPI document has seven top-level keys:
+#
+#   openapi    The spec version this file conforms to. Not your API's version.
+#   info       Title, version, description. Shows up in generated docs.
+#   servers    Base URLs. Prepended to every path below.
+#   security   The default credential for every operation. Overridable per operation.
+#   tags       Grouping labels. Controls sidebar sections in generated docs.
+#   paths      THE API ITSELF. Every URL, method, input, and output.
+#   components Reusable definitions. Everything here exists to be referenced by paths.
+#
+# The mental model: `paths` is the menu. `components` is the glossary the menu
+# points at, so you write each definition once.
+#
+# WHAT A GENERATOR DOES WITH IT
+#
+#   operationId          -> the SDK method name
+#   components/schemas   -> TypeScript types
+#   requestBody          -> the method's argument type
+#   responses 2xx        -> the method's return type
+#   responses 4xx/5xx    -> the error types it can throw
+#
+# So naming here is not cosmetic. `operationId: invoke` becomes
+# `client.invoke()`, and renaming it later breaks every installed SDK.
+#
+# THE SPEC DESCRIBES; THE HANDLER ENFORCES. `default`, `minimum`, `minItems`
+# and `pattern` below document what the server does. They do not make it do it.
+# A constraint here that the handler does not apply is worse than no
+# constraint, because the SDK trusts this file.
+# =============================================================================
+
+# Which version of the OpenAPI specification this document follows. 3.1 aligns
+# with JSON Schema, which matters here because services declare their own JSON
+# Schemas and 3.0 would have mangled them.
+openapi: 3.1.0
+
+# -----------------------------------------------------------------------------
+# info: metadata. Pure documentation, no behaviour. Safe to edit freely.
+# -----------------------------------------------------------------------------
+info:
+  title: Varis API
+  # Your API's version, unrelated to the `openapi:` key above. Bump the minor
+  # when you add a field, the major when you break one.
+  version: 0.1.0
+  license:
+    name: Proprietary
+    url: https://varis.mx/terms
+  # Markdown. Becomes the landing page of generated docs.
+  description: |
+    Varis lets autonomous agents discover, pay for, and invoke software
+    capabilities published by independent developers.
+
+    Two credential types reach this API:
+
+    - An **agent key** (`var_ak_`) invokes services and spends credits against
+      its owner's balance.
+    - A **developer API key** (`var_sk_`) publishes and updates services and
+      reads your own transactions. It never invokes and never spends.
+
+    Sending the wrong credential type is a `403`, not a `401`. The credential
+    is valid; it is not permitted for that operation.
+
+# -----------------------------------------------------------------------------
+# servers: base URLs. Every path below is appended to these.
+#
+# This is where the SDK's default base URL comes from. Add a `staging` entry
+# here later and the generator gives users a way to switch.
+#
+# Paths below start at /v1, so this resolves to https://api.varis.mx/v1/invoke.
+# Your route file lives at app/api/v1/invoke, so production needs a rewrite in
+# next.config.ts stripping the /api prefix. The alternative is changing every
+# path below to /api/v1, which is uglier and permanent.
+# -----------------------------------------------------------------------------
+servers:
+  - url: https://api.varis.mx
+    description: Production
+
+# -----------------------------------------------------------------------------
+# security: the DEFAULT credential requirement for every operation.
+#
+# The names refer to entries in components/securitySchemes at the bottom.
+# An operation that needs something different overrides this with its own
+# `security:` key. An operation that needs no auth sets `security: []`.
+#
+# A LIST of entries means OR: any one of them works. SEVERAL SCHEMES INSIDE ONE
+# entry means AND: all of them must be sent. The developer credential is the
+# second case, because an access token without an owner identifier does not say
+# what to act on.
+# -----------------------------------------------------------------------------
+security:
+  - agentKey: []
+
+# -----------------------------------------------------------------------------
+# tags: grouping labels only. Each operation declares which tags it belongs to,
+# and docs tools turn these into sidebar sections. Most generators also derive
+# SDK namespaces from tags, so `Services` is what produces a
+# `client.services.*` grouping while `operationId` supplies the method name.
+# -----------------------------------------------------------------------------
+tags:
+  - name: Gateway
+    description: Invoking services.
+  - name: Services
+    description: Publishing, updating, and finding services.
+
+# =============================================================================
+# paths: the API itself.
+#
+# Structure is always three levels:
+#
+#   paths:
+#     /the/url:           <- the path, appended to the server URL
+#       post:             <- the HTTP method
+#         operationId:    <- the SDK method name
+#         ...             <- everything about that one operation
+#
+# One path can hold several methods. /v1/services has both `get` (search) and
+# `post` (publish), because they share a URL but do different things.
+# =============================================================================
+paths:
+  # ---------------------------------------------------------------------------
+  # The gateway. The only endpoint that moves money.
+  # ---------------------------------------------------------------------------
+  /v1/invoke:
+    post:
+      # Becomes client.invoke() in the generated SDK. Must be unique across the
+      # whole document. This is the single most consequential string in the file.
+      operationId: invoke
+      # One line, shown in docs listings and IDE autocomplete.
+      summary: Invoke a service
+      # The long version. Markdown. This is where behaviour that the schema
+      # cannot express goes.
+      description: |
+        Validates the input against the service's declared input schema, calls
+        the provider, and validates the response against the declared output
+        schema. A response that violates the output schema is a failure: the
+        provider has not delivered.
+
+        Requires an agent key. A developer API key is rejected with `403`.
+      tags: [Gateway]
+      # Overrides the top-level default. Here it happens to match, but stating
+      # it explicitly means changing the global default later cannot silently
+      # change this operation.
+      security:
+        - agentKey: []
+      # Inputs that are NOT the body: headers, query strings, path segments.
+      # This one is a $ref because the same header appears on future endpoints.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      # The request body. Generators turn this into the method's argument type.
+      requestBody:
+        required: true
+        content:
+          # The media type. Everything under it describes a JSON body.
+          application/json:
+            schema:
+              type: object
+              # Fields the caller MUST send. Everything else is optional.
+              # Generators mark non-required fields as optional in TypeScript.
+              required: [service_id, input]
+              properties:
+                service_id:
+                  type: string
+                  description: The service to invoke.
+                  # Shows up in docs and in the "try it" playground.
+                  example: var_serv_ydZfZ9gKKe1tQe
+                input:
+                  type: object
+                  description: |
+                    Passed to the provider unchanged. Must validate against the
+                    service's `input_schema`. A malformed input fails the
+                    invocation without calling the provider and without
+                    creating a transaction.
+                  # Allows arbitrary keys. Without this, a strict validator
+                  # rejects anything not listed under `properties`, and here
+                  # the shape is defined by the service, not by Varis.
+                  additionalProperties: true
+      # Every status code this operation can return, each with its body shape.
+      #
+      # Status codes are quoted because YAML would otherwise read 200 as a
+      # number and the spec requires string keys.
+      #
+      # This block is what makes the generated SDK's error handling typed. An
+      # undocumented status code becomes an untyped surprise for callers.
+      responses:
+        "200":
+          # Required on every response. Docs show it beside the status code.
+          description: The provider returned output matching its declared schema.
+          # Response headers worth documenting. Most are not.
+          headers:
+            X-Varis-Request-Id:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [request_id, invocation_id, output]
+                properties:
+                  request_id:
+                    # A $ref inside properties: reuse one definition everywhere
+                    # the field appears, so changing it changes all of them.
+                    $ref: "#/components/schemas/RequestId"
+                  invocation_id:
+                    type: string
+                    example: var_invk_HgD8njwg3gkTca
+                  output:
+                    type: object
+                    description: The provider's response, verbatim.
+                    additionalProperties: true
+              # A whole-body example, as opposed to per-field `example:` keys.
+              # Worth writing for the happy path; skip it elsewhere.
+              example:
+                request_id: var_req_fc8e8702-6a7f-4f3f-9147-748936e5fee1
+                invocation_id: var_invk_HgD8njwg3gkTca
+                output:
+                  echoed: hello
+                  received_at: "2026-09-19T02:41:12.996Z"
+        "400":
+          description: |
+            The request is malformed, or `input` violates the service's
+            declared input schema. No invocation row is written and the
+            provider is never called.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              # `examples` (plural) holds several named cases. `example`
+              # (singular) holds one. Note the extra `value:` nesting the
+              # plural form requires; forgetting it is the usual mistake.
+              examples:
+                inputSchemaViolation:
+                  value:
+                    error:
+                      code: input_schema_violation
+                      message: The input does not match the service's input schema.
+                      details:
+                        - path: /message
+                          message: must be string
+                    request_id: var_req_fc8e8702-6a7f-4f3f-9147-748936e5fee1
+        "401":
+          # The entire response is a $ref, not just its schema. Use this when
+          # the description and body are identical across operations.
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          description: |
+            The owner's balance cannot cover this call. The response carries
+            the shortfall and a short-lived funding link already scoped to the
+            owner, so no re-authentication is needed. Retry with the same
+            idempotency key once the balance is topped up.
+          content:
+            application/json:
+              schema:
+                # Spelled out as its own schema rather than an allOf extension
+                # of Error. allOf merges TOP-LEVEL schemas, not nested objects:
+                # two branches each describing `error` produce a schema where
+                # neither branch evaluates the other's properties, and every
+                # field reads as unevaluated.
+                $ref: "#/components/schemas/InsufficientFundsError"
+              example:
+                error:
+                  code: insufficient_funds
+                  message: The balance does not cover this call.
+                  shortfall_credits: 150
+                  funding_url: https://varis.mx/fund/t/abc123
+                request_id: var_req_fc8e8702-6a7f-4f3f-9147-748936e5fee1
+        "403":
+          description: |
+            The credential is valid but not permitted. Sending a developer API
+            key here, or an agent whose limits or category scope exclude this
+            service.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: No such service, or the service is not published.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: |
+            The idempotency key has already been used against a different
+            service. Returning the other service's recorded outcome would hide
+            a caller bug, so this is an error rather than a replay.
+
+            A key reused against the SAME service is not an error: it returns
+            the recorded outcome with its original `request_id`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: conflict
+                  message: This idempotency key was used for a different service.
+                request_id: var_req_fc8e8702-6a7f-4f3f-9147-748936e5fee1
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          description: |
+            The provider failed. Either it returned a non-2xx status
+            (`provider_error`), or it returned output that violates its own
+            declared schema (`schema_violation`). The provider's raw response
+            is never forwarded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                providerError:
+                  value:
+                    error:
+                      code: provider_error
+                      message: The provider failed to handle the request.
+                    request_id: var_req_fc8e8702-6a7f-4f3f-9147-748936e5fee1
+                    invocation_id: var_invk_JQiIMAapCjpS4t
+                schemaViolation:
+                  value:
+                    error:
+                      code: schema_violation
+                      message: The provider's response does not match its declared output schema.
+                    request_id: var_req_fc8e8702-6a7f-4f3f-9147-748936e5fee1
+                    invocation_id: var_invk_JQiIMAapCjpS4t
+        "504":
+          description: The provider did not respond within the timeout.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ---------------------------------------------------------------------------
+  # One path, two methods. GET searches, POST publishes. They share a URL
+  # because they act on the same collection.
+  # ---------------------------------------------------------------------------
+  /v1/services:
+    get:
+      operationId: searchServices
+      summary: Search published services
+      description: |
+        Returns published services only. Accepts either credential type.
+
+        Different parameters are ANDed. Repeated `category` values are ORed.
+        So `?q=weather&category=data&category=science` means "matches weather,
+        AND is in data or science".
+      tags: [Services]
+      # Two entries means OR: an agent key works, or a signed-in developer
+      # does. The developer entry lists two schemes in one map, which is an
+      # AND: the bearer token says who, the owner identifier says for whom.
+      security:
+        - agentKey: []
+        - developerAccessToken: []
+          developerOwner: []
+      # Query-string parameters. `in: query` puts them after the ?; `in: header`
+      # makes them headers; `in: path` fills a {placeholder} in the URL.
+      parameters:
+        - name: q
+          in: query
+          description: |
+            Full-text search over name and description, with name weighted
+            higher.
+
+            Pass two to four capability words, not a sentence. Unquoted terms
+            are ANDed, so every word must appear in the same service. "weather
+            rainfall" works; "find me a weather service with rainfall data"
+            matches nothing.
+
+            Words are stemmed, so "rainfalls" finds "rainfall". Partial words
+            are not: "weath" matches nothing.
+
+            Supported syntax: `OR` between terms, `"quoted phrases"` for
+            adjacent words, and `-excluded` to remove a term.
+          schema:
+            type: string
+          example: weather rainfall
+        - name: category
+          in: query
+          description: Filter by category slug. Repeat for several; they are ORed.
+          schema:
+            # An array in a query string. The default serialisation repeats the
+            # key: ?category=a&category=b
+            type: array
+            items:
+              type: string
+        - name: max_price_cents
+          in: query
+          description: Exclude services priced above this, in US cents.
+          schema:
+            type: integer
+            # Constraints. Generators emit them as runtime validation and docs
+            # tools display them.
+            minimum: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            # Documents the server's behaviour when the caller omits it. It
+            # does NOT make the server apply it; your handler still must.
+            default: 20
+        - name: cursor
+          in: query
+          description: |
+            The `next_cursor` from a previous page. Every other filter must be
+            repeated alongside it, because the cursor carries position only.
+
+            Prefer following `next_url`, which already carries them.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A page of results.
+          content:
+            application/json:
+              schema:
+                type: object
+                # All three are always present. next_cursor and next_url are
+                # null on the last page rather than absent, so a caller can
+                # test one field instead of testing for existence.
+                required: [data, next_cursor, next_url]
+                properties:
+                  data:
+                    type: array
+                    # Every element is a Service. This is where one $ref
+                    # defines the shape of an entire list.
+                    items:
+                      $ref: "#/components/schemas/Service"
+                  next_cursor:
+                    # A 3.1 union type. In 3.0 this was `nullable: true`, which
+                    # no longer exists. Generators emit `string | null`.
+                    type: [string, "null"]
+                    description: |
+                      Opaque. Pass it back as `cursor` to get the next page.
+                      Null on the last page.
+                  next_url:
+                    type: [string, "null"]
+                    description: |
+                      The next page as a complete URL, with every filter from
+                      this request already applied. GET it directly rather than
+                      reassembling the query. Null on the last page.
+        "400":
+          description: A parameter is malformed, or the cursor is not valid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+    post:
+      operationId: publishService
+      summary: Publish a service
+      description: |
+        Creates a service, or updates the existing one with the same `slug`
+        under your ownership.
+
+        The slug identifies the service permanently. Changing a slug creates a
+        second service rather than renaming the first.
+
+        Publishing is idempotent. Sending an unchanged definition returns `200`
+        with `unchanged: true` and writes nothing, which is what makes
+        `varis publish` safe to run on every deploy.
+
+        Requires a signed-in developer who is a member of the owner named in
+        `X-Varis-Owner-Identifier`. The published service is attributed to that
+        person.
+      tags: [Services]
+      security:
+        - developerAccessToken: []
+          developerOwner: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceInput"
+      responses:
+        # Three outcomes across two codes. 201 means a row was inserted. 200
+        # means the service already existed, and `unchanged` says whether
+        # anything about it moved.
+        "200":
+          description: The service already existed. It was updated, or nothing changed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublishedService"
+        "201":
+          description: A new service was created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublishedService"
+        "400":
+          description: |
+            The service definition is invalid. A non-HTTPS or unreachable
+            endpoint, a malformed JSON Schema, a negative price, a description
+            under 20 characters, an unknown category slug, or no categories at
+            all.
+
+            Every problem is reported at once in `details`, so a caller fixing
+            a definition does not need one round trip per field.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: invalid_request
+                  message: The service definition is invalid.
+                  details:
+                    - path: /description
+                      message: must be at least 20 characters. Agents choose services by reading it.
+                    - path: /endpoint_url
+                      message: must use https
+                request_id: var_req_fc8e8702-6a7f-4f3f-9147-748936e5fee1
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: |
+            An agent key was sent, or the developer key lacks the
+            `services:write` scope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ---------------------------------------------------------------------------
+  # A templated path. {service_id} is filled from a path parameter.
+  # ---------------------------------------------------------------------------
+  /v1/services/{service_id}:
+    # Parameters declared HERE, above the methods, apply to every method on
+    # this path. Saves repeating the path parameter on both get and patch.
+    parameters:
+      - name: service_id
+        in: path
+        # Path parameters are always required. Omitting this is invalid.
+        required: true
+        schema:
+          type: string
+        example: var_serv_ydZfZ9gKKe1tQe
+
+    get:
+      operationId: getService
+      summary: Get a service
+      description: |
+        Published services are readable by any credential. `endpoint_url` is
+        returned only to the service's own owner.
+      tags: [Services]
+      security:
+        - agentKey: []
+        - developerAccessToken: []
+          developerOwner: []
+      responses:
+        "200":
+          description: The service.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Service"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: No such service, or it is not published.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    patch:
+      operationId: updateService
+      summary: Update your own service
+      description: |
+        Partial update. Omitted fields are left unchanged. Requires a signed-in
+        developer who is a member of the owner named in
+        `X-Varis-Owner-Identifier`, and the service must belong to that owner.
+
+        `slug` is immutable. Publishing under a new slug creates a second
+        service.
+      tags: [Services]
+      security:
+        - developerAccessToken: []
+          developerOwner: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              # A separate schema from ServiceInput because PATCH has no
+              # required fields and allows `status`, which publish also takes
+              # but defaults.
+              $ref: "#/components/schemas/ServiceUpdate"
+      responses:
+        "200":
+          description: The updated service.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Service"
+        "400":
+          description: The update is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: |
+            The service belongs to another owner, an agent key was sent, or the
+            key lacks the `services:write` scope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: No such service.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+# =============================================================================
+# components: the glossary.
+#
+# NOTHING HERE IS ACTIVE ON ITS OWN. A definition only takes effect where a
+# path $refs it. You can delete an unreferenced component with no effect, and
+# an unused one is dead weight.
+#
+# The $ref syntax is a path through this document:
+#   "#/components/schemas/Error"  ->  # is this file
+#                                     then components, then schemas, then Error
+#
+# Five sub-sections are used below. Each exists because a DIFFERENT part of an
+# operation is being reused:
+#
+#   securitySchemes  how callers authenticate
+#   parameters       whole request parameters (header, query, path)
+#   headers          response headers
+#   responses        whole responses, description and body together
+#   schemas          data shapes
+# =============================================================================
+components:
+  # ---------------------------------------------------------------------------
+  # How callers authenticate. Referenced by name from every `security:` key.
+  #
+  # Both credentials are bearer tokens. An agent carries a key it was issued.
+  # A developer carries the access token from `varis login`, plus the owner
+  # `varis init` wrote into varis.json: the token proves who they are, the
+  # owner says which workspace they are acting for, and the server checks the
+  # membership joining the two.
+  #
+  # OpenAPI cannot express "bearer token starting with var_ak_", so the two
+  # schemes look identical to a generator and the distinction lives in the
+  # descriptions and in your handler. The server tells them apart by the token
+  # itself: an agent key is prefixed, an access token is a JWT.
+  # ---------------------------------------------------------------------------
+  securitySchemes:
+    agentKey:
+      # `http` + `bearer` means the Authorization: Bearer <token> header.
+      # Other options include apiKey (custom header or query) and oauth2,
+      # which weekend 7 adds for the MCP server.
+      type: http
+      scheme: bearer
+      description: An agent key, prefixed `var_ak_`. Invokes and spends.
+    developerAccessToken:
+      type: http
+      scheme: bearer
+      description: |
+        The access token `varis login` stored on the developer's machine.
+        Identifies the human; carries no permissions of its own.
+    developerOwner:
+      type: apiKey
+      in: header
+      name: X-Varis-Owner-Identifier
+      description: |
+        The owner the developer is acting for, from varis.json. Only accepted
+        when the access token's user is a member of it.
+
+  # ---------------------------------------------------------------------------
+  # Reusable REQUEST parameters. Referenced from an operation's `parameters:`.
+  # ---------------------------------------------------------------------------
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Scoped to the agent. Reusing a key returns the recorded outcome of the
+        first call and does not invoke the provider again. Reusing a key
+        against a different service is a `409`.
+      schema:
+        type: string
+        maxLength: 255
+      example: 8f1a0c2e-3b4d-4f5a-9c6e-7d8f9a0b1c2d
+
+  # ---------------------------------------------------------------------------
+  # Reusable RESPONSE headers. A different section from `parameters` above
+  # because these travel outbound, not inbound.
+  # ---------------------------------------------------------------------------
+  headers:
+    RequestId:
+      description: Present on every response, including errors. Quote it in support requests.
+      schema:
+        type: string
+
+  # ---------------------------------------------------------------------------
+  # Whole reusable responses: description, headers, and body together.
+  #
+  # Use these when the same response appears identically across operations.
+  # A 401 is the same everywhere; a 404 is not, because its description
+  # differs per resource, which is why 404 is written out each time above.
+  # ---------------------------------------------------------------------------
+  responses:
+    Unauthorized:
+      description: The credential is missing, malformed, expired, or revoked.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: Too many requests.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds to wait.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  # ---------------------------------------------------------------------------
+  # schemas: data shapes. The section that becomes your TypeScript types.
+  #
+  # Each top-level key here becomes an exported type with that name, so
+  # `Service` becomes `interface Service`. Renaming one is a breaking change
+  # for anyone importing the type.
+  # ---------------------------------------------------------------------------
+  schemas:
+    # A named scalar. Worth extracting because the field appears in four
+    # places and the description should only be written once.
+    RequestId:
+      type: string
+      description: Unique to this request. Present on every response.
+      example: var_req_fc8e8702-6a7f-4f3f-9147-748936e5fee1
+
+    # Extracted so the same closed list drives ServiceInput, ServiceUpdate and
+    # Service. Mirrors the services_type_valid check constraint: adding a value
+    # is safe, renaming one is not.
+    ServiceType:
+      type: string
+      description: |
+        What shape of thing this is, as opposed to what domain it is about.
+        Categories answer the domain question. A market data feed is
+        service_type `data` with categories finance, media, and politics.
+      enum:
+        - data
+        - content
+        - tool
+        - skill
+        - compute
+        - memory
+        - storage
+        - model
+        - messaging
+      example: data
+
+    ServiceStatus:
+      type: string
+      description: |
+        `draft` is not discoverable and not invocable. `published` is both.
+        `disabled` stops new invocations without removing the service from
+        anyone's transaction history.
+      enum: [draft, published, disabled]
+
+    # The error envelope, shared by every failure response in the document.
+    # Nesting the code and message under `error` leaves room to add sibling
+    # fields such as `invocation_id` without collision.
+    Error:
+      type: object
+      required: [error, request_id]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: |
+                Stable and machine-readable. Branch on this, never on
+                `message`.
+              # This closed list becomes a union type in the SDK. Callers
+              # switch on it exhaustively, so adding a member is a minor bump
+              # and renaming one breaks every installed SDK.
+              enum:
+                - invalid_request
+                - input_schema_violation
+                - unauthorized
+                - forbidden
+                - not_found
+                - conflict
+                - insufficient_funds
+                - rate_limited
+                - provider_error
+                - schema_violation
+                - timeout
+                - internal_error
+            message:
+              type: string
+              description: Human-readable. Wording may change; do not parse it.
+            details:
+              type: array
+              description: |
+                Field-level detail, where the code carries any. `path` is a
+                JSON Pointer into the request body.
+              items:
+                type: object
+                properties:
+                  path:
+                    type: string
+                  message:
+                    type: string
+        request_id:
+          $ref: "#/components/schemas/RequestId"
+        invocation_id:
+          type: string
+          description: Present when the failure occurred after the invocation was accepted.
+
+    # The 402 body. Everything an agent needs to recover without a human:
+    # how short it is, and where to top up. The funding link is already scoped
+    # to the owner, so no re-authentication is needed. Retry with the same
+    # idempotency key once the balance covers the call.
+    #
+    # The single-value enum on `code` gives generators something to
+    # discriminate on, so a caller can narrow to this shape by checking it.
+    #
+    # shortfall_credits is in CREDITS while prices are in cents, because a
+    # shortfall can land between cents: 150 credits is 1.5 cents, which no
+    # whole-cent field can express.
+    InsufficientFundsError:
+      type: object
+      required: [error, request_id]
+      properties:
+        error:
+          type: object
+          required: [code, message, shortfall_credits, funding_url]
+          properties:
+            code:
+              type: string
+              enum: [insufficient_funds]
+            message:
+              type: string
+            shortfall_credits:
+              type: integer
+              description: Credits needed beyond the current balance.
+              example: 150
+            funding_url:
+              type: string
+              # `format` is a hint. Most validators ignore it unless
+              # configured; docs tools display it.
+              format: uri
+              description: Short-lived, scoped to the owner.
+        request_id:
+          $ref: "#/components/schemas/RequestId"
+
+    # FOUR SERVICE SHAPES, and the split is deliberate:
+    #
+    #   ServiceInput      what you send to create one. Most fields required.
+    #   ServiceUpdate     what you send to change one. Nothing required.
+    #   Service           what comes back on read.
+    #   PublishedService  what comes back on publish: a Service plus `unchanged`.
+    #
+    # Collapsing them would mean either `id` is required on create (it is not)
+    # or optional on read (it never is).
+    ServiceInput:
+      type: object
+      required:
+        - slug
+        - name
+        - description
+        - service_type
+        - categories
+        - endpoint_url
+        - input_schema
+        - output_schema
+        - price_cents
+      properties:
+        slug:
+          type: string
+          description: |
+            Unique within your ownership, and permanent. Republishing the same
+            slug updates that service; a new slug creates a second one.
+          # A regex constraint. Generators emit it as runtime validation.
+          # This one allows lowercase words joined by single hyphens.
+          pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+          maxLength: 64
+          example: weather-with-rainfall
+        name:
+          type: string
+          maxLength: 128
+          example: Weather with rainfall
+        description:
+          type: string
+          description: |
+            Required, and the highest-leverage field you write. An agent reads
+            it to decide whether to call you, and it is half the search index.
+            Name the capability and its inputs in plain words.
+          minLength: 20
+          maxLength: 1024
+          example: Returns current temperature, humidity, and rainfall in millimetres for any city.
+        service_type:
+          $ref: "#/components/schemas/ServiceType"
+        categories:
+          type: array
+          description: |
+            Category slugs, at least one. A service with no categories is
+            undiscoverable, so an empty list is an error rather than "all".
+
+            Unlike service_type, these are a closed list the platform defines.
+            An unknown slug is a 400.
+          minItems: 1
+          items:
+            type: string
+          example: [data, science]
+        endpoint_url:
+          type: string
+          format: uri
+          description: |
+            Must be HTTPS and publicly reachable. Varis signs every request to
+            it with Ed25519. Verify with the public key at
+            `/.well-known/varis-signing-keys`.
+
+            A localhost address is rejected at publish time rather than failing
+            silently on every invocation.
+          example: https://api.example.com/v1/weather
+        price_cents:
+          type: integer
+          minimum: 0
+          description: |
+            Charged per request, in US cents. An integer, as with every
+            financial API. Zero makes the service free.
+
+            Varis settles internally in credits at 100 credits per cent, which
+            is why fees and discounts on a one cent call still reconcile
+            exactly.
+          example: 3
+        version:
+          type: string
+          description: |
+            Recorded, not resolved. Invocations always hit the current
+            definition; there is no version selection in this release. The
+            field exists so published definitions carry one from the start.
+          default: "1.0.0"
+          example: "1.0.0"
+        status:
+          allOf:
+            - $ref: "#/components/schemas/ServiceStatus"
+          description: Defaults to `published`. Send `draft` to register without going live.
+          default: published
+        input_schema:
+          type: object
+          description: |
+            JSON Schema, with a top-level `type`. Validated before the provider
+            is called, so a malformed input never reaches you and never costs
+            the caller anything.
+          # The provider defines this shape, not Varis, so anything goes.
+          additionalProperties: true
+        output_schema:
+          type: object
+          description: |
+            JSON Schema, with a top-level `type`. A response that violates it
+            fails the invocation and reverses the charge, so declare what you
+            actually return.
+          additionalProperties: true
+
+    ServiceUpdate:
+      type: object
+      description: |
+        Every field optional. Omitted fields are unchanged. `slug` is immutable
+        and cannot appear here.
+      # No `required` key at all, which is what makes this a PATCH shape.
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          minLength: 20
+          maxLength: 1024
+        service_type:
+          $ref: "#/components/schemas/ServiceType"
+        categories:
+          type: array
+          description: Replaces the existing list wholesale, so a shorter list removes categories.
+          minItems: 1
+          items:
+            type: string
+        endpoint_url:
+          type: string
+          format: uri
+        price_cents:
+          type: integer
+          minimum: 0
+          description: In US cents. Takes effect on the next invocation.
+        version:
+          type: string
+        status:
+          $ref: "#/components/schemas/ServiceStatus"
+        input_schema:
+          type: object
+          additionalProperties: true
+        output_schema:
+          type: object
+          additionalProperties: true
+
+    Service:
+      type: object
+      # `required` on a RESPONSE schema is a promise you make to the caller:
+      # these fields are always present. Generators mark everything else
+      # optional, forcing callers to null-check. Promise only what you deliver.
+      required:
+        - id
+        - slug
+        - name
+        - description
+        - service_type
+        - price_cents
+        - input_schema
+        - output_schema
+        - status
+      properties:
+        id:
+          type: string
+          description: Pass this to `/v1/invoke`, not the slug.
+          example: var_serv_ydZfZ9gKKe1tQe
+        slug:
+          type: string
+          example: weather-with-rainfall
+        name:
+          type: string
+          example: Weather with rainfall data
+        description:
+          type: string
+        service_type:
+          $ref: "#/components/schemas/ServiceType"
+        provider_name:
+          type: string
+          description: The publishing owner's display name.
+          example: National Geographic
+        price_cents:
+          type: integer
+          description: The price per invocation, in US cents.
+          example: 3
+        version:
+          type: string
+          example: "1.0.0"
+        categories:
+          type: array
+          items:
+            type: string
+        input_schema:
+          type: object
+          additionalProperties: true
+        output_schema:
+          type: object
+          additionalProperties: true
+        status:
+          $ref: "#/components/schemas/ServiceStatus"
+        endpoint_url:
+          type: string
+          format: uri
+          # Not in `required` above, precisely because it is conditional.
+          # Discovery never returns it: a caller learns what a service does and
+          # what it costs, never where it lives. Routing is the gateway's job.
+          description: Returned only to the service's own owner.
+        created_at:
+          type: string
+          # date-time means RFC 3339. Generators may emit `string` or `Date`
+          # depending on configuration.
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PublishedService:
+      description: |
+        A Service, plus whether this publish actually changed anything. The CLI
+        prints created, updated, or unchanged from the status code and this
+        flag together.
+      allOf:
+        - $ref: "#/components/schemas/Service"
+        - type: object
+          required: [unchanged]
+          properties:
+            unchanged:
+              type: boolean
+              description: |
+                True when the submitted definition matched what was already
+                stored, in which case nothing was written and `updated_at` did
+                not move. Always false on a `201`.
