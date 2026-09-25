@@ -344,8 +344,8 @@ paths:
         Returns published services only. Accepts either credential type.
 
         Different parameters are ANDed. Repeated `category` values are ORed.
-        So `?q=weather&category=data&category=science` means "matches weather,
-        AND is in data or science".
+        So `?q=weather&category=climate&category=science` means "matches weather,
+        AND is in climate or science".
       tags: [Services]
       # Two entries means OR: an agent key works, or a signed-in developer
       # does. The developer entry lists two schemes in one map, which is an
@@ -384,7 +384,7 @@ paths:
             # key: ?category=a&category=b
             type: array
             items:
-              type: string
+              $ref: "#/components/schemas/ServiceCategory"
         - name: max_price_cents
           in: query
           description: Exclude services priced above this, in US cents.
@@ -771,6 +771,269 @@ components:
         - messaging
       example: data
 
+    # Closed list the platform defines. Mirrors the categories seed table and
+    # the ServiceCategory union in the TypeScript SDK: adding a value is safe,
+    # renaming or removing one is not.
+    ServiceCategory:
+      type: string
+      description: |
+        What domain a service is about. Complements service_type, which says
+        what shape of thing it is.
+      enum:
+        - accounting
+        - advertising
+        - aerospace
+        - agents
+        - agriculture
+        - ai
+        - analytics
+        - animation
+        - apis
+        - architecture
+        - art
+        - astrology
+        - astronomy
+        - audio
+        - audio-processing
+        - authentication
+        - automation
+        - automotive
+        - aviation
+        - banking
+        - beauty
+        - biology
+        - biotech
+        - blockchain
+        - books
+        - branding
+        - browser-automation
+        - business-intelligence
+        - calendar
+        - careers
+        - census
+        - charity
+        - chemistry
+        - civil-engineering
+        - climate
+        - clinical-trials
+        - cloud
+        - code-generation
+        - code-review
+        - collaboration
+        - comics
+        - commodities
+        - compliance
+        - computer-vision
+        - construction
+        - consulting
+        - contracts
+        - copywriting
+        - credit
+        - crm
+        - crypto
+        - culture
+        - customer-support
+        - databases
+        - datasets
+        - dating
+        - defense
+        - demographics
+        - design
+        - developer-tools
+        - devops
+        - diy
+        - documents
+        - earth-science
+        - ecology
+        - ecommerce
+        - economics
+        - education
+        - elections
+        - electrical-engineering
+        - email
+        - embeddings
+        - employment
+        - energy
+        - entertainment
+        - environment
+        - esports
+        - evaluation
+        - events
+        - family
+        - fashion
+        - file-conversion
+        - film
+        - finance
+        - fitness
+        - food
+        - forex
+        - fraud-detection
+        - gaming
+        - gardening
+        - genealogy
+        - genomics
+        - geolocation
+        - geopolitics
+        - geospatial
+        - governance
+        - government
+        - graphic-design
+        - hardware
+        - health
+        - healthcare
+        - higher-education
+        - history
+        - home
+        - hospitality
+        - housing
+        - human-resources
+        - human-rights
+        - humor
+        - identity-verification
+        - image-generation
+        - image-processing
+        - immigration
+        - infrastructure
+        - insurance
+        - intellectual-property
+        - international-relations
+        - inventory
+        - investing
+        - invoicing
+        - iot
+        - journalism
+        - k12
+        - knowledge-base
+        - kyc
+        - language-learning
+        - law-enforcement
+        - legal
+        - lending
+        - lifestyle
+        - llm
+        - localization
+        - logistics
+        - machine-learning
+        - manufacturing
+        - maps
+        - maritime
+        - market-research
+        - marketing
+        - marketplace
+        - materials-science
+        - mathematics
+        - mechanical-engineering
+        - media
+        - medical-imaging
+        - medicine
+        - mental-health
+        - military
+        - mobile-development
+        - monitoring
+        - mortgage
+        - music
+        - networking
+        - news
+        - nlp
+        - nonprofit
+        - notifications
+        - nutrition
+        - observability
+        - ocr
+        - oil-and-gas
+        - open-data
+        - open-source
+        - outdoors
+        - parenting
+        - patents
+        - payments
+        - payroll
+        - pdf
+        - personal-finance
+        - pets
+        - pharmaceuticals
+        - philosophy
+        - photography
+        - physics
+        - podcasts
+        - policy
+        - politics
+        - pricing
+        - privacy
+        - procurement
+        - productivity
+        - project-management
+        - prompts
+        - psychology
+        - public-health
+        - public-records
+        - public-relations
+        - public-safety
+        - public-transit
+        - publishing
+        - quantum-computing
+        - real-estate
+        - recipes
+        - recruiting
+        - reference
+        - relationships
+        - religion
+        - renewable-energy
+        - research
+        - restaurants
+        - retail
+        - robotics
+        - sales
+        - sanctions
+        - scheduling
+        - science
+        - scraping
+        - search
+        - security
+        - semiconductors
+        - seo
+        - shipping
+        - shopping
+        - small-business
+        - sms
+        - social-media
+        - sociology
+        - software-engineering
+        - space
+        - speech
+        - sports
+        - startups
+        - statistics
+        - stocks
+        - supply-chain
+        - sustainability
+        - tax
+        - telecommunications
+        - television
+        - testing
+        - text-to-speech
+        - ticketing
+        - time-series
+        - trading
+        - transcription
+        - translation
+        - transportation
+        - travel
+        - ui-design
+        - urban-planning
+        - utilities
+        - vector-search
+        - venture-capital
+        - veterinary
+        - video
+        - video-processing
+        - weather
+        - web-development
+        - web3
+        - wellness
+        - writing
+      example: weather
+
     ServiceStatus:
       type: string
       description: |
@@ -926,8 +1189,8 @@ components:
             An unknown slug is a 400.
           minItems: 1
           items:
-            type: string
-          example: [data, science]
+            $ref: "#/components/schemas/ServiceCategory"
+          example: [weather, science]
         endpoint_url:
           type: string
           format: uri
@@ -1000,7 +1263,7 @@ components:
           description: Replaces the existing list wholesale, so a shorter list removes categories.
           minItems: 1
           items:
-            type: string
+            $ref: "#/components/schemas/ServiceCategory"
         endpoint_url:
           type: string
           format: uri
@@ -1063,7 +1326,7 @@ components:
         categories:
           type: array
           items:
-            type: string
+            $ref: "#/components/schemas/ServiceCategory"
         input_schema:
           type: object
           additionalProperties: true

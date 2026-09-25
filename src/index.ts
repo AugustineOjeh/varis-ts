@@ -1,6 +1,6 @@
 import type { ServiceDefinition } from "./types.js";
 
-export type { ServiceDefinition, ServiceStatus, ServiceType } from "./types.js";
+export type { ServiceDefinition } from "./types.js";
 
 class Services {
   /**
@@ -10,7 +10,7 @@ class Services {
    * become the service's input and output JSON Schemas. Every value you pass
    * must be a literal, not a variable or environment value.
    */
-  define<Input, Output>(definition: ServiceDefinition): void {
+  define<InputSchema, OutputSchema>(definition: ServiceDefinition): void {
     void definition;
   }
 }
