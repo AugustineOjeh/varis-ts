@@ -14,7 +14,8 @@
     "varis-sdk-build": "./dist/generator/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "docs"
   ],
   "engines": {
     "node": ">=22.12"
