@@ -47,7 +47,7 @@
  * - A new rule about the whole project, for example "at most N services",
  *   goes in `run()` before the `if (errors.length > 0)` check.
  * - A rule about one field's value belongs in read.ts, or better, in the
- *   `ServiceDefinition` type in src/types.ts, so that TypeScript enforces it
+ *   `ServiceDefinition` type in packages/sdk/src/types.ts, so that TypeScript enforces it
  *   and step 2 reports it automatically.
  */
 import path from "node:path";
@@ -119,7 +119,7 @@ function run(projectDir: string): BuildResult {
 
   for (const call of calls) {
     // Step 2: TypeScript's own complaints inside this call. The
-    // ServiceDefinition type in src/types.ts does most of the field
+    // ServiceDefinition type in packages/sdk/src/types.ts does most of the field
     // validation (required fields, allowed enum values, and so on).
     errors.push(...typeErrorsIn(call, program, diagnosticsByFile));
 

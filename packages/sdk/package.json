@@ -1,0 +1,35 @@
+{
+  "name": "@usevaris/sdk",
+  "version": "0.1.0",
+  "description": "Declare Varis services in TypeScript and verify requests from the Varis gateway.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "docs"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc6",
+    "typecheck": "tsc6 --noEmit && tsc6 -p test --noEmit",
+    "test": "vitest run",
+    "prepack": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AugustineOjeh/varis-ts.git",
+    "directory": "packages/sdk"
+  }
+}

@@ -2,13 +2,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { build } from "../src/generator/build.js";
-import { type BuildError, BuildFailure } from "../src/generator/errors.js";
+import { build } from "../src/build.js";
+import { type BuildError, BuildFailure } from "../src/errors.js";
+import { findWarnings } from "../src/warnings.js";
 
-const SDK_ENTRY = path.resolve(import.meta.dirname, "../src/index.ts");
+const SDK_ENTRY = path.resolve(import.meta.dirname, "../../sdk/src/index.ts");
 const projects: string[] = [];
 
-/** Creates a throwaway project whose @usevaris/sdk import resolves to this repo's source. */
+/** Creates a throwaway project whose @usevaris/sdk import resolves to packages/sdk/src. */
 function makeProject(
   files: Record<string, string>,
   manifest: object | null = { owner_id: "own_123" },
@@ -326,5 +327,39 @@ ${fields("stable")}
     expect(buildErrors(dir)[0]!.message).toBe(
       "varis.json not found. Run varis init first.",
     );
+  });
+});
+
+describe("findWarnings", () => {
+  it("warns when @usevaris/build is in dependencies", () => {
+    const dir = makeProject({
+      "package.json": JSON.stringify({
+        type: "module",
+        dependencies: { "@usevaris/build": "^0.1.0" },
+      }),
+    });
+
+    const warnings = findWarnings(dir);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("@usevaris/build in dependencies");
+  });
+
+  it("stays quiet when @usevaris/build is a devDependency or absent", () => {
+    const dev = makeProject({
+      "package.json": JSON.stringify({
+        type: "module",
+        devDependencies: { "@usevaris/build": "^0.1.0" },
+      }),
+    });
+    const absent = makeProject({});
+
+    expect(findWarnings(dev)).toEqual([]);
+    expect(findWarnings(absent)).toEqual([]);
+  });
+
+  it("skips the check when package.json is invalid", () => {
+    const dir = makeProject({ "package.json": "{ not json" });
+
+    expect(findWarnings(dir)).toEqual([]);
   });
 });

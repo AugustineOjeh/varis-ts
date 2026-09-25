@@ -26,7 +26,7 @@
  * WHAT IS NOT SUPPORTED (each one records an error)
  * - Nested objects as values, `null`, and `undefined`. ServiceDefinition
  *   doesn't need them today. If you add an object-valued field to
- *   src/types.ts, extend `readLiteral` and the `Literal` type.
+ *   packages/sdk/src/types.ts, extend `readLiteral` and the `Literal` type.
  * - Spreads (`...base`), shorthand (`{ slug }`), methods, getters and setters.
  * - Computed keys (`[KEY]: ...`).
  * - `+5`, `!0`, and other expressions, including array spreads and holes (`[1,,2]`).
@@ -34,7 +34,7 @@
  * WHAT THIS FILE DOES NOT CHECK
  * It doesn't know which fields exist or which values are valid. For example,
  * a misspelled `servce_type` or a `price_cents` of "3" gets through here.
- * Those rules live in the `ServiceDefinition` TYPE in src/types.ts. The
+ * Those rules live in the `ServiceDefinition` TYPE in packages/sdk/src/types.ts. The
  * TypeScript compiler enforces that type, and build.ts reports its errors
  * (see `typeErrorsIn`). To add a new validation rule, change the type
  * first. Add code here only when a type can't express the rule.

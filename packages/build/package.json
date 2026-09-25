@@ -1,0 +1,33 @@
+{
+  "name": "@usevaris/build",
+  "version": "0.1.0",
+  "description": "Generates varis.json from the define calls in a TypeScript project.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "varis-build": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "tsc6",
+    "typecheck": "tsc6 --noEmit && tsc6 -p test --noEmit",
+    "test": "vitest run",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@typescript/typescript6": "^6.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AugustineOjeh/varis-ts.git",
+    "directory": "packages/build"
+  }
+}

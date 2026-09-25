@@ -37,12 +37,12 @@
  *   project somehow has several copies of @usevaris/sdk (for example in a
  *   monorepo), only calls to that one copy are found.
  *
- * !! COUPLING WITH src/index.ts !!
+ * !! COUPLING WITH packages/sdk/src/index.ts !!
  * `findSdkDefine` looks for a class named exactly `Services` with a method
- * named exactly `define`. If you rename either one in src/index.ts, update
+ * named exactly `define`. If you rename either one in packages/sdk/src/index.ts, update
  * this file too, or every build will fail with "Found @usevaris/sdk but not
  * its define method." The same applies to the package name in `SDK_MODULE`,
- * which must match `name` in package.json.
+ * which must match `name` in packages/sdk/package.json.
  */
 import path from "node:path";
 import ts from "@typescript/typescript6";
@@ -188,7 +188,7 @@ function findSdkDefine(program: ts.Program): ts.MethodDeclaration | undefined {
   // Scan the SDK file's top-level statements for `class Services { define(...) }`.
   // In an installed package this is dist/index.d.ts, where it appears as
   // `declare class Services`. In this repo's tests, `paths` points at
-  // src/index.ts instead. Both shapes are handled the same way.
+  // packages/sdk/src/index.ts instead. Both shapes are handled the same way.
   for (const statement of sdkFile.statements) {
     if (
       !ts.isClassDeclaration(statement) || statement.name?.text !== "Services"
@@ -204,7 +204,7 @@ function findSdkDefine(program: ts.Program): ts.MethodDeclaration | undefined {
   }
 
   // The SDK file is there but its shape is wrong: a corrupt install, or a
-  // rename in src/index.ts that wasn't mirrored above.
+  // rename in packages/sdk/src/index.ts that wasn't mirrored above.
   throw new BuildFailure([
     {
       file: sdkFile.fileName,

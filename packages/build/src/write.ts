@@ -34,7 +34,7 @@
  *   define call clears the manifest.
  *
  * WHERE TO MAKE CHANGES
- * - When you add a field to `ServiceDefinition` in src/types.ts, add it to
+ * - When you add a field to `ServiceDefinition` in packages/sdk/src/types.ts, add it to
  *   FIELD_ORDER in the position where it should appear in varis.json.
  */
 import fs from "node:fs";
@@ -46,7 +46,7 @@ export type ManifestService = Record<string, unknown>;
 
 /**
  * The key order for each service in varis.json. Keep it in sync with the
- * fields of `ServiceDefinition` in src/types.ts. The two schemas always come last.
+ * fields of `ServiceDefinition` in packages/sdk/src/types.ts. The two schemas always come last.
  */
 const FIELD_ORDER = [
   "slug",

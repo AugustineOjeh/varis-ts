@@ -1,7 +1,8 @@
 # @usevaris/sdk
 
 Declare Varis services in TypeScript. The SDK turns your types into the JSON
-Schemas in `varis.json`, which the Varis CLI publishes.
+Schemas in `varis.json`, which the Varis CLI publishes. It also verifies that
+requests to your endpoints come from Varis.
 
 ## Install
 
@@ -17,7 +18,9 @@ import { Varis } from "@usevaris/sdk";
 type Input = { city: string };
 type Output = { max_temp: number; min_temp: number };
 
-new Varis().services.define<Input, Output>({
+const varis = new Varis();
+
+varis.services.define<Input, Output>({
   slug: "weather",
   name: "Weather",
   description: "Returns the temperature range for any city.",
@@ -28,7 +31,18 @@ new Varis().services.define<Input, Output>({
 });
 ```
 
-Then run `varis build` from project root to update `varis.json`.
+Then run `varis build` from the project root to update `varis.json`.
+
+## Verify requests
+
+In the handler that serves the service, reject any request Varis didn't sign
+before you read the body:
+
+```ts
+if (!(await varis.verifyRequest(request))) {
+  return new Response("Unauthorized", { status: 401 });
+}
+```
 
 ## Documentation
 

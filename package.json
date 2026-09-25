@@ -1,43 +1,18 @@
 {
-  "name": "@usevaris/sdk",
-  "version": "0.1.0",
-  "description": "Declare Varis services in TypeScript and generate varis.json.",
-  "license": "MIT",
+  "name": "varis-ts",
+  "private": true,
   "type": "module",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
-  },
-  "bin": {
-    "varis-sdk-build": "./dist/generator/cli.js"
-  },
-  "files": [
-    "dist",
-    "docs"
+  "workspaces": [
+    "packages/*"
   ],
-  "engines": {
-    "node": ">=22.12"
-  },
   "scripts": {
-    "build": "tsc6",
-    "typecheck": "tsc6 --noEmit",
-    "test": "vitest run",
-    "prepare": "npm run build"
-  },
-  "dependencies": {
-    "@typescript/typescript6": "^6.0.2"
+    "build": "npm run build --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "npm run test --workspaces"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@typescript/typescript6": "^6.0.2",
     "vitest": "^5.0.1"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/AugustineOjeh/varis-ts.git"
   }
 }
