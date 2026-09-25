@@ -28,7 +28,7 @@ new Varis().services.define<Input, Output>({
 });
 ```
 
-Then run `varis build` to update `varis.json`.
+Then run `varis build` from project root to update `varis.json`.
 
 ## Documentation
 

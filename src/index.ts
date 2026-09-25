@@ -1,6 +1,11 @@
 import type { ServiceDefinition } from "./types.js";
 
-export type { ServiceDefinition } from "./types.js";
+export type {
+  ServiceCategory,
+  ServiceDefinition,
+  ServiceStatus,
+  ServiceType,
+} from "./types.js";
 
 class Services {
   /**
