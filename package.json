@@ -20,8 +20,8 @@
     "node": ">=22.12"
   },
   "scripts": {
-    "build": "tsc",
-    "typecheck": "tsc --noEmit",
+    "build": "tsc6",
+    "typecheck": "tsc6 --noEmit",
     "test": "vitest run",
     "prepare": "npm run build"
   },
@@ -30,7 +30,6 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "typescript": "^7.0.2",
     "vitest": "^5.0.1"
   },
   "publishConfig": {
