@@ -14,7 +14,7 @@ export function readDefinition(
 ): Record<string, Literal> | undefined {
   const argument = call.arguments[0];
   if (!argument || !ts.isObjectLiteralExpression(unwrap(argument))) {
-    errors.push(errorAt(call, "Write the service definition as an object inside the define call."));
+    errors.push(errorAt(call, "Define the service as an object inside the define call."));
     return undefined;
   }
 
