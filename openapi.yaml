@@ -697,6 +697,73 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /v1/cli/device/token:
+    post:
+      operationId: exchangeDeviceCode
+      summary: Collect a CLI sign-in's token
+      description: |
+        Poll this with the device code from `/v1/cli/device/code` every
+        `interval` seconds. Until the developer decides, it answers
+        `authorization_pending`. Once they approve, it returns a device token,
+        exactly once.
+
+        Answers in OAuth's own shape (RFC 6749 section 5, RFC 8628 section
+        3.5), not the Varis error envelope, so any device-flow client reads
+        it. Stop polling on `access_denied`, `expired_token`, or
+        `invalid_grant`.
+
+        Unauthenticated: the device code is the credential.
+      tags: [CLI]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_code]
+              properties:
+                device_code:
+                  type: string
+                  example: var_dc_8fK2mQ4pL7xR3nT8wY6zB1cD5eF0gH2jK4mN9pQr
+      responses:
+        "200":
+          description: Approved. Store the token; it is never shown again.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceToken"
+        "400":
+          description: Not approved yet, or never will be. See `error`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceTokenError"
+              examples:
+                pending:
+                  value:
+                    error: authorization_pending
+                    error_description: Waiting for you to approve the sign-in in your browser.
+                    interval: 5
+                    request_id: var_req_fc8e8702-6a7f-4f3f-9147-748936e5fee1
+                slow_down:
+                  value:
+                    error: slow_down
+                    error_description: Polling too often. Wait the new interval before polling again.
+                    interval: 10
+                    request_id: var_req_fc8e8702-6a7f-4f3f-9147-748936e5fee1
+        "500":
+          description: The poll failed on the server. Poll again after `interval`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceTokenError"
+
 components:
   # ---------------------------------------------------------------------------
   # How callers authenticate. Referenced by name from every `security:` key.
@@ -1272,6 +1339,55 @@ components:
         request_id:
           type: string
           example: var_req_fc8e8702-6a7f-4f3f-9147-748936e5fee1
+
+    DeviceToken:
+      type: object
+      required: [access_token, token_type, expires_in, request_id]
+      properties:
+        access_token:
+          type: string
+          description: |
+            The device token. Send it as `Authorization: Bearer` on management
+            requests. Store it outside the repository; the CLI keeps it in
+            `~/.config/varis/credentials.toml`.
+          example: var_dt_9fK2mQ4pL7xR3nT8wY6zB1cD5eF0gH2jK4mN8pLq
+        token_type:
+          type: string
+          const: Bearer
+        expires_in:
+          type: integer
+          description: |
+            Seconds until the token expires if unused: 180 days. Every request
+            that uses it pushes the expiry forward.
+          example: 15552000
+        request_id:
+          type: string
+
+    DeviceTokenError:
+      type: object
+      required: [error, error_description, request_id]
+      properties:
+        error:
+          type: string
+          enum:
+            - authorization_pending
+            - slow_down
+            - access_denied
+            - expired_token
+            - invalid_grant
+            - invalid_request
+            - server_error
+          description: |
+            `authorization_pending`: keep polling. `slow_down`: keep polling,
+            at the new `interval`. Anything else: stop.
+        error_description:
+          type: string
+          description: Plain language, safe to print to the developer.
+        interval:
+          type: integer
+          description: Seconds to wait before the next poll. Present on `authorization_pending` and `slow_down`.
+        request_id:
+          type: string
 
     ServiceInput:
       type: object
