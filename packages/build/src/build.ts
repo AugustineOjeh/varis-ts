@@ -13,6 +13,7 @@
  *                  example a missing `slug` or a misspelled `service_type`.
  *   3. read.ts     Read the object literal passed to define into plain values.
  *   4. convert.ts  Turn the `Input` and `Output` type arguments into JSON Schemas.
+ *      flat-input.ts  For a GET service, check the input schema is flat.
  *   5. write.ts    Merge the services into varis.json, with a stable order.
  *
  * ERROR MODEL (read this before you change anything)
@@ -53,6 +54,7 @@
 import path from "node:path";
 import ts from "@typescript/typescript6";
 import { convertSchemas } from "./convert.js";
+import { flatInputProblems } from "./flat-input.js";
 import {
   type BuildError,
   BuildFailure,
@@ -62,6 +64,13 @@ import {
 import { findDefineCalls, loadProgram } from "./find.js";
 import { readDefinition } from "./read.js";
 import { type ManifestService, writeManifest } from "./write.js";
+
+/**
+ * Written into varis.json when a define call omits `method`, so the manifest
+ * always says how the gateway will call the endpoint. Mirrors the default on
+ * services.method in the Varis database.
+ */
+const DEFAULT_METHOD = "GET";
 
 /** What a successful build returns. cli.ts prints it as JSON on stdout. */
 export interface BuildResult {
@@ -155,9 +164,33 @@ function run(projectDir: string): BuildResult {
       slugs.set(slug, call);
     }
 
+    // A GET service sends its input as query parameters, which can't nest.
+    // The type can't express this (it can't see Input), so check the
+    // converted schema. An invalid `method` value is already a type error
+    // from step 2, so only an explicit "POST" skips the check.
+    const method = fields.method ?? DEFAULT_METHOD;
+    if (method !== "POST") {
+      const problems = flatInputProblems(schemas.input_schema);
+      if (problems.length > 0) {
+        for (const problem of problems) {
+          const where = problem.path
+            ? `The Input field "${problem.path}"`
+            : "The Input type";
+          errors.push(
+            errorAt(
+              call,
+              `${where} ${problem.message}. A GET service receives its input as query parameters, which can't nest. Flatten Input, or set method: "POST" to receive it as a JSON body.`,
+            ),
+          );
+        }
+        continue;
+      }
+    }
+
     // Merge the definition fields and the two schemas into one manifest entry.
+    // The default method is written out, so varis.json is explicit.
     // write.ts decides the final key order.
-    services.push({ ...fields, ...schemas });
+    services.push({ ...fields, method, ...schemas });
   }
 
   // All or nothing: one problem anywhere means varis.json stays untouched.

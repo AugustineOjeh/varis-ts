@@ -4,6 +4,7 @@ import { RequestVerifier, type VarisOptions } from "./verify.js";
 export type {
   ServiceCategory,
   ServiceDefinition,
+  ServiceMethod,
   ServiceStatus,
   ServiceType,
 } from "./types.js";

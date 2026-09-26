@@ -43,6 +43,7 @@ new Varis().services.define<Input, Output>({
   service_type: "data",
   categories: ["science"],
   endpoint_url: "https://api.example.com/v1/weather",
+  method: "GET",
   price_cents: 3,
 });
 ```
@@ -54,12 +55,30 @@ new Varis().services.define<Input, Output>({
 - Add a doc comment to every field of `Input`. Agents calling the service read
   it to decide what to send.
 
+## Choose the method
+
+`method` says how Varis calls your endpoint. Match it to the handler that
+already serves the route.
+
+- **`GET`**, the default: the input arrives as query parameters, in sorted key
+  order, with a repeated key for each array item. A space arrives as `+`.
+  `Input` must be flat: every field a `string`, `number`, `boolean`, literal
+  union, or an array of those. Numbers and booleans arrive as strings, so
+  parse them. `varis build` fails on a nested `Input` for a `GET` service.
+- **`POST`**: the input arrives as a JSON body, and `Input` can nest. Use it
+  for structured input, and for sensitive input, because query strings are
+  written to access logs.
+
+Varis sends only the fields `Input` declares. The `endpoint_url` can't carry a
+query string; declare those values as `Input` fields instead.
+
 ## Verify every request
 
 Anyone can call your endpoint URL directly. `verifyRequest` confirms that
 Varis sent the request, so you serve only calls that Varis bills for.
 
-In every handler that serves a Varis service:
+Export the handler for the service's `method`: `GET` for a `GET` service,
+`POST` for a `POST` service. In it:
 
 1. Call `varis.verifyRequest(request)` first, before anything else reads the
    request.
@@ -68,22 +87,48 @@ In every handler that serves a Varis service:
 4. Let `VarisKeyFetchError` propagate so that your framework returns a `500`
    response. It means Varis's signing keys couldn't be fetched, not that the
    request is invalid. Never turn it into a `401`.
-5. Parse the body only after verification succeeds.
+5. Read the input only after verification succeeds: the query parameters for
+   `GET`, the body for `POST`.
 
 ```ts
 import { Varis } from "@usevaris/sdk";
 
 const varis = new Varis();
 
-export async function POST(request: Request): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   if (!(await varis.verifyRequest(request))) {
     return new Response("Unauthorized", { status: 401 });
   }
-  const input = await request.json();
+  const params = new URL(request.url).searchParams;
+  const city = params.get("city");
+  const days = Number(params.get("days") ?? "7");
   // Handle the call.
   return Response.json({ data: [] });
 }
 ```
+
+For a `POST` service, export `POST` and read `await request.json()` after
+verifying.
+
+### When the route also serves your own users
+
+If the route already serves signed-in users, add Varis as a second way in
+rather than a separate route. Check Varis first, and fall back to your
+existing authentication:
+
+```ts
+export async function GET(request: Request): Promise<Response> {
+  const isVaris = await varis.verifyRequest(request);
+  if (!isVaris && !(await isSignedIn(request))) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  // ...
+}
+```
+
+When `isVaris` is true there is no end user: no session, no cookies, no
+account. An AI agent is calling on behalf of whoever funded it. Decide what a
+Varis caller may see, and never serve one user's private data to it.
 
 - Create one `Varis` instance per module and reuse it. It caches the signing
   keys.
@@ -91,6 +136,10 @@ export async function POST(request: Request): Promise<Response> {
   body, so the body stays readable afterward.
 - Never parse, re-serialize, or modify the body before verifying. The
   signature covers the exact bytes Varis sent.
+- The signature also covers the method, path, and query string. Don't rewrite
+  the path before verifying, for example in middleware that strips a prefix;
+  verify with the request as it arrived. A proxy that changes only the host is
+  fine.
 - `verifyRequest` returns `false` for unsigned, expired, or tampered requests.
   It doesn't throw for them.
 - If the developer runs Varis locally, `new Varis({ keysUrl })` fetches keys
@@ -106,7 +155,8 @@ export async function POST(request: Request): Promise<Response> {
   so those have no value. If the endpoint URL differs between environments, use
   the production URL.
 - **Pass both type arguments**: `define<Input, Output>(...)`.
-- **Make `Input` an object type.**
+- **Make `Input` an object type.** For a `GET` service, keep it flat; see
+  "Choose the method".
 - **Use only these types** in `Input` and `Output`: `string`, `number`,
   `boolean`, `null`, string or number literals and unions of them, arrays,
   objects and interfaces, optional fields, `Record<string, T>`, and unions of
@@ -118,7 +168,7 @@ export async function POST(request: Request): Promise<Response> {
   the service free.
 - **Use only the public API**: `Varis`, `services.define`, `verifyRequest`,
   `VarisKeyFetchError`, and the exported types `ServiceDefinition`,
-  `ServiceType`, `ServiceStatus`, and `VarisOptions`.
+  `ServiceType`, `ServiceMethod`, `ServiceStatus`, and `VarisOptions`.
 
 ## Fields
 
@@ -129,7 +179,8 @@ export async function POST(request: Request): Promise<Response> {
 | `description` | Yes | At least 20 characters. Say what the service returns and when to use it. |
 | `service_type` | Yes | `data`, `content`, `tool`, `skill`, `compute`, `memory`, `storage`, `model`, or `messaging`. |
 | `categories` | Yes | At least one category slug. |
-| `endpoint_url` | Yes | HTTPS and publicly reachable. |
+| `endpoint_url` | Yes | HTTPS and publicly reachable, with no query string. |
+| `method` | No | `GET` or `POST`. Defaults to `GET`, which needs a flat `Input`. |
 | `price_cents` | Yes | Non-negative integer, in US cents. |
 | `version` | No | Defaults to `1.0.0`. |
 | `status` | No | `draft`, `published`, or `disabled`. Defaults to `published`. |

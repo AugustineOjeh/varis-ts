@@ -179,6 +179,106 @@ ${fields("weather")}
     });
   });
 
+  it("writes the default method, GET, when a definition omits it", () => {
+    const dir = makeProject({
+      "src/route.ts": `
+import { Varis } from "@usevaris/sdk";
+new Varis().services.define<{ city: string }, string>({
+${fields("weather")}
+});`,
+    });
+
+    build(dir);
+    const [service] = readManifest(dir).services;
+
+    expect(service.method).toBe("GET");
+    // Right after endpoint_url, per FIELD_ORDER.
+    const keys = Object.keys(service);
+    expect(keys.indexOf("method")).toBe(keys.indexOf("endpoint_url") + 1);
+  });
+
+  it("accepts a flat GET input: scalars, literal unions, optional fields, arrays of scalars", () => {
+    const dir = makeProject({
+      "src/route.ts": `
+import { Varis } from "@usevaris/sdk";
+type Input = {
+  city: string;
+  days?: number;
+  units: "metric" | "imperial";
+  hourly: boolean;
+  tags: string[];
+};
+new Varis().services.define<Input, string>({
+${fields("weather", { method: `"GET"` })}
+});`,
+    });
+
+    expect(build(dir)).toEqual({ services: ["weather"] });
+    expect(readManifest(dir).services[0].method).toBe("GET");
+  });
+
+  it("fails a GET service with a nested input, naming the field, and writes nothing", () => {
+    const dir = makeProject({
+      "src/route.ts": `
+import { Varis } from "@usevaris/sdk";
+type Input = { city: string; address: { zip: string } };
+new Varis().services.define<Input, string>({
+${fields("nested")}
+});`,
+    });
+    const before = fs.readFileSync(path.join(dir, "varis.json"), "utf8");
+
+    const errors = buildErrors(dir);
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({ file: path.join("src", "route.ts"), line: 4 });
+    expect(errors[0]!.message).toContain('The Input field "address"');
+    expect(errors[0]!.message).toContain('method: "POST"');
+    expect(fs.readFileSync(path.join(dir, "varis.json"), "utf8")).toBe(before);
+  });
+
+  it("fails a GET service whose input is an array of objects or nullable", () => {
+    const dir = makeProject({
+      "src/route.ts": `
+import { Varis } from "@usevaris/sdk";
+type Input = { points: Array<{ x: number }>; note: string | null };
+new Varis().services.define<Input, string>({
+${fields("points", { method: `"GET"` })}
+});`,
+    });
+
+    const messages = buildErrors(dir).map((error) => error.message);
+    expect(messages.some((m) => m.includes('"points"'))).toBe(true);
+    expect(messages.some((m) => m.includes('"note"'))).toBe(true);
+  });
+
+  it("builds a POST service with a nested input", () => {
+    const dir = makeProject({
+      "src/route.ts": `
+import { Varis } from "@usevaris/sdk";
+type Input = { city: string; address: { zip: string } };
+new Varis().services.define<Input, string>({
+${fields("nested", { method: `"POST"` })}
+});`,
+    });
+
+    expect(build(dir)).toEqual({ services: ["nested"] });
+    expect(readManifest(dir).services[0].method).toBe("POST");
+  });
+
+  it("reports a method other than GET or POST from the type checker", () => {
+    const dir = makeProject({
+      "src/route.ts": `
+import { Varis } from "@usevaris/sdk";
+new Varis().services.define<{ city: string }, string>({
+${fields("put", { method: `"PUT"` })}
+});`,
+    });
+
+    const errors = buildErrors(dir);
+    expect(errors.some((error) => error.message.includes('"PUT"'))).toBe(true);
+  });
+
   it("finds a renamed instance", () => {
     const dir = makeProject({
       "src/route.ts": `

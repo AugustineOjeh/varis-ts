@@ -1,5 +1,16 @@
 export type ServiceStatus = "draft" | "published" | "disabled";
 
+/**
+ * How the Varis gateway calls your endpoint. Agents always call Varis the
+ * same way; this is the request your endpoint receives.
+ *
+ * - `GET`: the input arrives as query parameters, so `Input` must be flat:
+ *   strings, numbers, booleans, literal unions, and arrays of those. Numbers
+ *   and booleans arrive as strings.
+ * - `POST`: the input arrives as a JSON body, so `Input` can nest.
+ */
+export type ServiceMethod = "GET" | "POST";
+
 export interface ServiceDefinition {
   /** Unique within your owner, and permanent. Use lowercase words joined by hyphens. */
   slug: string;
@@ -9,8 +20,14 @@ export interface ServiceDefinition {
   service_type: ServiceType;
   /** At least one category slug from the platform's closed list. Categories tell agents what domain the service covers. */
   categories: ServiceCategory[];
-  /** Must be HTTPS and publicly reachable. */
+  /** Must be HTTPS and publicly reachable, with no query string. */
   endpoint_url: string;
+  /**
+   * How the gateway calls `endpoint_url`. Defaults to "GET", which needs a
+   * flat `Input`. Use "POST" for nested input, or for input that shouldn't
+   * appear in access logs.
+   */
+  method?: ServiceMethod;
   /** Price per request, in US cents. Zero makes the service free. */
   price_cents: number;
   /** Recorded, not resolved. Defaults to "1.0.0". */

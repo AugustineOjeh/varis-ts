@@ -4,8 +4,16 @@
  * SIGNING FORMAT (must match lib/crypto/signing.ts in the private varis repo)
  * - `x-varis-timestamp`: Unix time in whole seconds.
  * - `x-varis-signature`: base64 Ed25519 signature over the UTF-8 bytes of
- *   `${timestamp}.${rawBody}`.
+ *   `${timestamp}.${method}.${pathAndQuery}.${rawBody}`, where `method` is
+ *   GET or POST, `pathAndQuery` is the request path and query exactly as
+ *   received (no host), and `rawBody` is empty for GET.
  * - `x-varis-key-id`: the `kid` of the key that signed it.
+ *
+ * The path and query are signed so a captured request can't be replayed to
+ * another endpoint or with a changed query. The host isn't, so a proxy that
+ * rewrites the host doesn't break verification; one that rewrites the path
+ * does. The gateway form-encodes a GET query the way URLSearchParams writes
+ * it, which frameworks that normalise `request.url` reproduce byte for byte.
  * Public keys come from VARIS_SIGNING_KEYS_URL as
  * `{ "keys": [{ "kid", "public_key_pem" }] }`, where the PEM is SPKI.
  *
@@ -93,9 +101,14 @@ export class RequestVerifier {
     const key = await this.#key(kid);
     if (!key) return false;
 
-    // The signed bytes are UTF-8 `${timestamp}.${rawBody}`. The body is used
-    // byte for byte, never decoded and re-encoded.
-    const prefix = encoder.encode(`${timestampHeader}.`);
+    // The signed bytes are UTF-8
+    // `${timestamp}.${method}.${pathAndQuery}.${rawBody}`. The path and
+    // query come from the URL as received, still percent-encoded. The body
+    // is used byte for byte, never decoded and re-encoded.
+    const url = new URL(request.url);
+    const prefix = encoder.encode(
+      `${timestampHeader}.${request.method}.${url.pathname}${url.search}.`,
+    );
     const signed = new Uint8Array(prefix.length + body.length);
     signed.set(prefix);
     signed.set(body, prefix.length);

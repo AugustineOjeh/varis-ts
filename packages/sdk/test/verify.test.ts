@@ -25,12 +25,28 @@ async function makeKey(kid: string): Promise<TestKey> {
   };
 }
 
-/** Signs the way the gateway does: Ed25519 over UTF-8 `${timestamp}.${rawBody}`. */
+/**
+ * Signs the way the gateway does: Ed25519 over UTF-8
+ * `${timestamp}.${method}.${pathAndQuery}.${rawBody}`, with an empty body for
+ * GET. `deliverTo` and `deliverAs` send the signed request somewhere else, the
+ * way a replayed request would arrive.
+ */
 async function signedRequest(
   key: TestKey,
   body: string,
-  options: { timestamp?: number; headers?: Record<string, string | null> } = {},
+  options: {
+    timestamp?: number;
+    headers?: Record<string, string | null>;
+    method?: "GET" | "POST";
+    url?: string;
+    deliverTo?: string;
+    deliverAs?: "GET" | "POST";
+  } = {},
 ): Promise<Request> {
+  const method = options.method ?? "POST";
+  const url = options.url ?? "https://provider.example.com/weather";
+  const rawBody = method === "GET" ? "" : body;
+  const { pathname, search } = new URL(url);
   const timestamp = String(
     options.timestamp ?? Math.floor(Date.now() / 1000),
   );
@@ -38,19 +54,22 @@ async function signedRequest(
     await crypto.subtle.sign(
       { name: "Ed25519" },
       key.privateKey,
-      new TextEncoder().encode(`${timestamp}.${body}`),
+      new TextEncoder().encode(
+        `${timestamp}.${method}.${pathname}${search}.${rawBody}`,
+      ),
     ),
   );
   const headers: Record<string, string | null> = {
-    "content-type": "application/json",
+    ...(method === "POST" && { "content-type": "application/json" }),
     "x-varis-timestamp": timestamp,
     "x-varis-signature": btoa(String.fromCharCode(...signature)),
     "x-varis-key-id": key.kid,
     ...options.headers,
   };
-  return new Request("https://provider.example.com/weather", {
-    method: "POST",
-    body,
+  const sentMethod = options.deliverAs ?? method;
+  return new Request(options.deliverTo ?? url, {
+    method: sentMethod,
+    body: sentMethod === "GET" ? undefined : rawBody,
     headers: Object.fromEntries(
       Object.entries(headers).filter(
         (entry): entry is [string, string] => entry[1] !== null,
@@ -119,6 +138,63 @@ describe("Varis.verifyRequest", () => {
     });
 
     expect(await new Varis().verifyRequest(tampered)).toBe(false);
+  });
+
+  it("accepts a signed GET with its input in the query string", async () => {
+    const key = await makeKey("k1");
+    serveKeys([key.publicKey]);
+    // Form-encoded the way the gateway sends it: a space is +.
+    const request = await signedRequest(key, "", {
+      method: "GET",
+      url: "https://provider.example.com/weather?city=Port+Harcourt&units=metric",
+    });
+
+    expect(await new Varis().verifyRequest(request)).toBe(true);
+  });
+
+  it("rejects a GET replayed with a changed query", async () => {
+    const key = await makeKey("k1");
+    serveKeys([key.publicKey]);
+    const request = await signedRequest(key, "", {
+      method: "GET",
+      url: "https://provider.example.com/weather?city=Lagos",
+      deliverTo: "https://provider.example.com/weather?city=Abuja",
+    });
+
+    expect(await new Varis().verifyRequest(request)).toBe(false);
+  });
+
+  it("rejects a request replayed to another path", async () => {
+    const key = await makeKey("k1");
+    serveKeys([key.publicKey]);
+    const request = await signedRequest(key, BODY, {
+      deliverTo: "https://provider.example.com/admin",
+    });
+
+    expect(await new Varis().verifyRequest(request)).toBe(false);
+  });
+
+  it("rejects a request replayed with another method", async () => {
+    const key = await makeKey("k1");
+    serveKeys([key.publicKey]);
+    const request = await signedRequest(key, "", {
+      method: "GET",
+      url: "https://provider.example.com/weather",
+      deliverAs: "POST",
+    });
+
+    expect(await new Varis().verifyRequest(request)).toBe(false);
+  });
+
+  it("accepts a request whose host was rewritten by a proxy", async () => {
+    const key = await makeKey("k1");
+    serveKeys([key.publicKey]);
+    const request = await signedRequest(key, BODY, {
+      url: "https://provider.example.com/weather",
+      deliverTo: "http://internal-host:8080/weather",
+    });
+
+    expect(await new Varis().verifyRequest(request)).toBe(true);
   });
 
   it("rejects a stale timestamp", async () => {

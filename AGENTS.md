@@ -30,6 +30,7 @@ varis-ts/
     ├── src/find.ts         Loads the project and finds define calls.
     ├── src/read.ts         Reads the literal values in a define call.
     ├── src/convert.ts      Turns Input and Output types into JSON Schemas.
+    ├── src/flat-input.ts   The flat-input rule for GET services. Mirrors the API.
     ├── src/write.ts        Writes varis.json.
     ├── src/warnings.ts     Non-fatal warnings printed on success.
     ├── src/errors.ts       BuildError and BuildFailure.
@@ -73,6 +74,9 @@ To work on one package, add `--workspace packages/sdk` or
   the other.
 - Change `packages/sdk/docs/agents.md` in the same commit as any public API
   change.
+- `packages/build/src/flat-input.ts` must match `lib/schema/flat-input.ts`
+  in the private `varis` repository, which applies the same rule at publish.
+  If you change one, change the other.
 - Add new field validation to the `ServiceDefinition` type in
   `src/types.ts` first. The generator reports its type errors automatically.
   Change the generator only when a type can't express the rule.

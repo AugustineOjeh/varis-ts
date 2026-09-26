@@ -55,6 +55,7 @@ const FIELD_ORDER = [
   "service_type",
   "categories",
   "endpoint_url",
+  "method",
   "price_cents",
   "version",
   "status",
