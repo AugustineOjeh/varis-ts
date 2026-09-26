@@ -105,6 +105,11 @@ tags:
     description: Invoking services.
   - name: Services
     description: Publishing, updating, and finding services.
+  - name: CLI
+    description: |
+      Signing in the `varis` CLI. The device authorisation flow from RFC 8628:
+      the CLI starts a sign-in, the developer approves it in the dashboard, and
+      the CLI collects a device token.
 
 # =============================================================================
 # paths: the API itself.
@@ -645,6 +650,53 @@ paths:
 #   responses        whole responses, description and body together
 #   schemas          data shapes
 # =============================================================================
+
+  # ---------------------------------------------------------------------------
+  # The CLI's sign-in. RFC 8628 field names, so OAuth tooling reads them as is.
+  # ---------------------------------------------------------------------------
+  /v1/cli/device/code:
+    post:
+      operationId: startDeviceAuthorisation
+      summary: Start a CLI sign-in
+      description: |
+        Starts `varis login`. Returns a device code for the CLI to poll with, a
+        user code for the developer to enter at `verification_uri`, and how
+        often to poll.
+
+        The device code is a secret and this is its only copy. Varis stores
+        its hash. The handshake expires after `expires_in` seconds, 10 minutes,
+        whether or not anyone approves it.
+
+        Unauthenticated, because the developer has no token yet.
+      tags: [CLI]
+      # An empty list overrides the document-wide default: no credential.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceCodeRequest"
+      responses:
+        "200":
+          description: The sign-in has started. Show the user code and poll.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceCode"
+        "400":
+          description: The body is not JSON, or `device_name` is missing or blank.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: The sign-in could not be started. Retry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 components:
   # ---------------------------------------------------------------------------
   # How callers authenticate. Referenced by name from every `security:` key.
@@ -1159,6 +1211,68 @@ components:
     #
     # Collapsing them would mean either `id` is required on create (it is not)
     # or optional on read (it never is).
+    DeviceCodeRequest:
+      type: object
+      required: [device_name]
+      properties:
+        device_name:
+          type: string
+          minLength: 1
+          description: |
+            This machine's name, usually its hostname. Shown on the approval
+            page so the developer can tell their own machine from a sign-in
+            they did not start, and kept on the device token to list signed-in
+            machines. Surrounding whitespace is trimmed, and a name over 128
+            characters is truncated rather than rejected.
+          example: ada-macbook-pro
+
+    DeviceCode:
+      type: object
+      required:
+        - device_code
+        - user_code
+        - verification_uri
+        - verification_uri_complete
+        - expires_in
+        - interval
+        - request_id
+      properties:
+        device_code:
+          type: string
+          description: |
+            Secret. Send it to the token endpoint on every poll. Never show it
+            to the developer or log it.
+          example: var_dc_8fK2mQ4pL7xR3nT8wY6zB1cD5eF0gH2jK4mN9pQr
+        user_code:
+          type: string
+          description: |
+            What the developer enters on the approval page. Eight characters
+            from RFC 8628's base-20 alphabet, with a dash for reading. Matching
+            ignores case and punctuation.
+          pattern: "^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$"
+          example: WDJB-MJHT
+        verification_uri:
+          type: string
+          format: uri
+          description: The approval page. Print it with the user code.
+          example: https://varis.my/device
+        verification_uri_complete:
+          type: string
+          format: uri
+          description: The approval page with the user code filled in. Open it in a browser when one is available.
+          example: https://varis.my/device?code=WDJB-MJHT
+        expires_in:
+          type: integer
+          description: Seconds until the device code and user code stop working.
+          example: 600
+        interval:
+          type: integer
+          description: Seconds to wait between polls. Grows by 5 each time the token endpoint answers `slow_down`.
+          example: 5
+        request_id:
+          type: string
+          example: var_req_fc8e8702-6a7f-4f3f-9147-748936e5fee1
+
     ServiceInput:
       type: object
       required:
