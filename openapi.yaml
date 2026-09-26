@@ -1045,6 +1045,24 @@ components:
     # The error envelope, shared by every failure response in the document.
     # Nesting the code and message under `error` leaves room to add sibling
     # fields such as `invocation_id` without collision.
+    ServiceMethod:
+      type: string
+      description: |
+        How Varis calls your `endpoint_url`. Agents always call Varis with
+        `POST /v1/invoke`; this is the request your endpoint receives.
+
+        `GET` sends the validated input as a query string, in sorted key order,
+        with the key repeated for each array item, and no body. Numbers and
+        booleans arrive as strings. Only fields declared in `input_schema` are
+        sent, so its properties must be flat: strings, numbers, booleans,
+        literal unions, and arrays of those. A nested input is a 400 at publish.
+        Keep sensitive inputs in `POST` services, because query strings land in
+        access logs.
+
+        `POST` sends the validated input as a JSON body.
+      enum: [GET, POST]
+      default: GET
+
     Error:
       type: object
       required: [error, request_id]
@@ -1201,7 +1219,18 @@ components:
 
             A localhost address is rejected at publish time rather than failing
             silently on every invocation.
+
+            No query string or fragment. For a `GET` service, the input becomes
+            the query string, so declare query values as `input_schema`
+            properties instead.
           example: https://api.example.com/v1/weather
+        method:
+          allOf:
+            - $ref: "#/components/schemas/ServiceMethod"
+          description: |
+            Defaults to `GET`. Publishing is declarative, so omitting it on a
+            republish sets `GET` even if the service was `POST`.
+          default: GET
         price_cents:
           type: integer
           minimum: 0
@@ -1232,6 +1261,9 @@ components:
             JSON Schema, with a top-level `type`. Validated before the provider
             is called, so a malformed input never reaches you and never costs
             the caller anything.
+
+            For a `GET` service, a top-level `type` of `object` whose
+            properties are all flat. See `ServiceMethod`.
           # The provider defines this shape, not Varis, so anything goes.
           additionalProperties: true
         output_schema:
@@ -1267,6 +1299,13 @@ components:
         endpoint_url:
           type: string
           format: uri
+          description: No query string or fragment.
+        method:
+          allOf:
+            - $ref: "#/components/schemas/ServiceMethod"
+          description: |
+            Omitted means unchanged. Switching to `GET` is a 400 when the
+            stored or submitted `input_schema` is not flat.
         price_cents:
           type: integer
           minimum: 0
@@ -1341,6 +1380,12 @@ components:
           # Not in `required` above, precisely because it is conditional.
           # Discovery never returns it: a caller learns what a service does and
           # what it costs, never where it lives. Routing is the gateway's job.
+          description: Returned only to the service's own owner.
+        method:
+          allOf:
+            - $ref: "#/components/schemas/ServiceMethod"
+          # Conditional, like endpoint_url: agents always POST /v1/invoke, so
+          # how the gateway reaches the provider is none of their business.
           description: Returned only to the service's own owner.
         created_at:
           type: string
