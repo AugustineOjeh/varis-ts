@@ -80,8 +80,12 @@ To work on one package, add `--workspace packages/sdk` or
 - Add new field validation to the `ServiceDefinition` type in
   `src/types.ts` first. The generator reports its type errors automatically.
   Change the generator only when a type can't express the rule.
-- `ServiceCategory` mirrors `ServiceCategory` in `openapi.yaml`. Adding a value
-  is safe. Renaming one isn't.
+- `ServiceCategory` is the source of truth for categories. `ServiceCategory` in
+  `openapi.yaml` and the `service_categories` rows in the private `varis`
+  database mirror it, and `varis build` type-checks against it, so a slug
+  missing from the database builds cleanly and then fails at publish. Adding a
+  value means a data migration in `varis` in the same change. Adding is safe;
+  renaming or removing one isn't.
 
 ### The generator
 
