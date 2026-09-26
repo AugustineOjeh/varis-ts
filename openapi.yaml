@@ -765,6 +765,44 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeviceTokenError"
 
+  /v1/me/owners:
+    get:
+      operationId: listMyOwners
+      summary: List the owners you belong to
+      description: |
+        The owners the signed-in developer is a member of, with their role in
+        each. `varis init` shows these as a picker and writes the chosen
+        `id` into `varis.json` as `owner_id`.
+
+        Needs only the device token. `X-Varis-Owner-Identifier` is ignored,
+        because choosing an owner is what this list is for.
+      tags: [CLI]
+      security:
+        - deviceToken: []
+      responses:
+        "200":
+          description: Every owner you belong to, sorted by name.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [owners, request_id]
+                properties:
+                  owners:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/OwnerMembership"
+                  request_id:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: An agent key was sent. Only a device token acts for a developer.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 components:
   # ---------------------------------------------------------------------------
   # How callers authenticate. Referenced by name from every `security:` key.
@@ -1391,6 +1429,22 @@ components:
           description: Seconds to wait before the next poll. Present on `authorization_pending` and `slow_down`.
         request_id:
           type: string
+
+    OwnerMembership:
+      type: object
+      required: [id, name, role]
+      properties:
+        id:
+          type: string
+          description: Send this as `X-Varis-Owner-Identifier`, and store it in `varis.json` as `owner_id`.
+          example: var_ownr_A7xK9mQ2pL4tRs
+        name:
+          type: string
+          example: World Bank
+        role:
+          type: string
+          enum: [admin, member]
+          description: Your role in this owner.
 
     ServiceInput:
       type: object
