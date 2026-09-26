@@ -765,6 +765,44 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeviceTokenError"
 
+  /v1/cli/logout:
+    post:
+      operationId: logout
+      summary: Sign this machine out of the CLI
+      description: |
+        Revokes the device token that sends the request, and only that one.
+        Other machines signed in as the same developer stay signed in; sign
+        them out from the dashboard's Devices settings.
+
+        Needs only the device token. Afterwards the token is rejected on
+        every route, this one included, so a second call is a `401`. Treat
+        that as success: the machine is signed out either way.
+      tags: [CLI]
+      security:
+        - deviceToken: []
+      responses:
+        "200":
+          description: This machine is signed out.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [signed_out, request_id]
+                properties:
+                  signed_out:
+                    type: boolean
+                    const: true
+                  request_id:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: An agent key was sent. Only a device token can log out.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /v1/me/owners:
     get:
       operationId: listMyOwners
