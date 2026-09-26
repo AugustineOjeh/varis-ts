@@ -4,8 +4,8 @@
  * WHAT THIS FILE DOES
  * `writeManifest` opens the project's existing varis.json and replaces ONLY
  * its `services` array. Every other top-level field is kept exactly as it
- * was, including `owner_id`, which the Varis CLI's `varis init` command
- * wrote there. The services are sorted, and so are their keys, so running
+ * was, including `owner_id` and `base_url`, which the Varis CLI's
+ * `varis init` command wrote there. The services are sorted, and so are their keys, so running
  * the build twice on the same code produces a byte-identical file. That
  * keeps git diffs quiet.
  *

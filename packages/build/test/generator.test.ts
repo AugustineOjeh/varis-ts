@@ -279,6 +279,182 @@ ${fields("put", { method: `"PUT"` })}
     expect(errors.some((error) => error.message.includes('"PUT"'))).toBe(true);
   });
 
+  it("writes every default when a definition declares only what it must", () => {
+    const dir = makeProject(
+      {
+        "src/route.ts": `
+import { Varis } from "@usevaris/sdk";
+new Varis().services.define<{ city: string }, string>({
+  slug: "minimal",
+  name: "Minimal",
+  description: "A service declared with only the required fields.",
+  service_type: "data",
+  categories: ["science"],
+  path: "/v1/minimal",
+});`,
+      },
+      { owner_id: "own_123", base_url: "https://api.example.com" },
+    );
+
+    build(dir);
+    const [service] = readManifest(dir).services;
+
+    expect(service).toMatchObject({
+      endpoint_url: "https://api.example.com/v1/minimal",
+      method: "GET",
+      price_cents: 0,
+      version: "1.0.0",
+      status: "published",
+    });
+    // varis.json matches what the API publishes: no path, only the URL.
+    expect(service).not.toHaveProperty("path");
+  });
+
+  it("keeps a declared value over its default", () => {
+    const dir = makeProject({
+      "src/route.ts": `
+import { Varis } from "@usevaris/sdk";
+new Varis().services.define<{ city: string }, string>({
+${fields("priced", { version: `"2.1.0"`, status: `"draft"` })}
+});`,
+    });
+
+    build(dir);
+    expect(readManifest(dir).services[0]).toMatchObject({
+      price_cents: 3,
+      version: "2.1.0",
+      status: "draft",
+    });
+  });
+
+  it("joins base_url and path with one slash, however base_url ends", () => {
+    const dir = makeProject(
+      {
+        "src/route.ts": `
+import { Varis } from "@usevaris/sdk";
+new Varis().services.define<{ city: string }, string>({
+${fields("joined", { endpoint_url: "", path: `"/weather"` })}
+});`,
+      },
+      { owner_id: "own_123", base_url: "https://api.example.com/v1/" },
+    );
+
+    build(dir);
+    expect(readManifest(dir).services[0].endpoint_url).toBe(
+      "https://api.example.com/v1/weather",
+    );
+  });
+
+  it("uses endpoint_url as written, ignoring base_url", () => {
+    const dir = makeProject(
+      {
+        "src/route.ts": `
+import { Varis } from "@usevaris/sdk";
+new Varis().services.define<{ city: string }, string>({
+${fields("elsewhere", { endpoint_url: `"https://other.example.com/x"` })}
+});`,
+      },
+      { owner_id: "own_123", base_url: "https://api.example.com" },
+    );
+
+    build(dir);
+    expect(readManifest(dir).services[0].endpoint_url).toBe(
+      "https://other.example.com/x",
+    );
+  });
+
+  it("fails a path with no base_url in varis.json", () => {
+    const dir = makeProject({
+      "src/route.ts": `
+import { Varis } from "@usevaris/sdk";
+new Varis().services.define<{ city: string }, string>({
+${fields("orphan", { endpoint_url: "", path: `"/weather"` })}
+});`,
+    });
+
+    const errors = buildErrors(dir);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({ file: path.join("src", "route.ts"), line: 3 });
+    expect(errors[0]!.message).toContain("path needs base_url in varis.json");
+  });
+
+  it("fails when neither endpoint_url nor path is set", () => {
+    const dir = makeProject({
+      "src/route.ts": `
+import { Varis } from "@usevaris/sdk";
+new Varis().services.define<{ city: string }, string>({
+${fields("nowhere", { endpoint_url: "" })}
+});`,
+    });
+
+    expect(buildErrors(dir)[0]!.message).toContain("Set path");
+  });
+
+  it("fails when both endpoint_url and path are set", () => {
+    const dir = makeProject(
+      {
+        "src/route.ts": `
+import { Varis } from "@usevaris/sdk";
+new Varis().services.define<{ city: string }, string>({
+${fields("both", { path: `"/weather"` })}
+});`,
+      },
+      { owner_id: "own_123", base_url: "https://api.example.com" },
+    );
+
+    expect(buildErrors(dir)[0]!.message).toContain("not both");
+  });
+
+  it("rejects a path without a leading slash through the type", () => {
+    const dir = makeProject(
+      {
+        "src/route.ts": `
+import { Varis } from "@usevaris/sdk";
+new Varis().services.define<{ city: string }, string>({
+${fields("slashless", { endpoint_url: "", path: `"weather"` })}
+});`,
+      },
+      { owner_id: "own_123", base_url: "https://api.example.com" },
+    );
+
+    expect(buildErrors(dir).some((e) => e.message.includes("weather"))).toBe(true);
+  });
+
+  it("rejects an unusable base_url in varis.json", () => {
+    for (const baseUrl of [
+      "http://api.example.com",
+      "https://localhost:3000",
+      "https://api.example.com?env=prod",
+      42,
+    ]) {
+      const dir = makeProject(
+        {
+          "src/route.ts": `
+import { Varis } from "@usevaris/sdk";
+new Varis().services.define<{ city: string }, string>({
+${fields("x", { endpoint_url: "", path: `"/weather"` })}
+});`,
+        },
+        { owner_id: "own_123", base_url: baseUrl },
+      );
+
+      const errors = buildErrors(dir);
+      expect(errors.some((e) => e.file === "varis.json" && e.message.includes("base_url"))).toBe(true);
+    }
+  });
+
+  it("rejects an endpoint_url the API would refuse", () => {
+    const dir = makeProject({
+      "src/route.ts": `
+import { Varis } from "@usevaris/sdk";
+new Varis().services.define<{ city: string }, string>({
+${fields("local", { endpoint_url: `"http://localhost:3000/x"` })}
+});`,
+    });
+
+    expect(buildErrors(dir)[0]!.message).toContain("endpoint_url must use https");
+  });
+
   it("finds a renamed instance", () => {
     const dir = makeProject({
       "src/route.ts": `
@@ -377,12 +553,12 @@ ${fields("untyped")}
       "src/route.ts": `
 import { Varis } from "@usevaris/sdk";
 new Varis().services.define<{ a: string }, string>({
-${fields("unpriced", { price_cents: "" })}
+${fields("undescribed", { description: "" })}
 });`,
     });
 
     expect(
-      buildErrors(dir).some((error) => error.message.includes("price_cents")),
+      buildErrors(dir).some((error) => error.message.includes("description")),
     ).toBe(true);
   });
 

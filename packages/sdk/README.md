@@ -26,10 +26,14 @@ varis.services.define<Input, Output>({
   description: "Returns the temperature range for any city.",
   service_type: "data",
   categories: ["science"],
-  endpoint_url: "https://api.example.com/weather",
+  path: "/weather",
   price_cents: 3,
 });
 ```
+
+`path` is joined to the production `base_url` in `varis.json`. Use
+`endpoint_url` instead for a service on another host. `method`, `price_cents`,
+`version`, and `status` are optional.
 
 Then run `varis build` from the project root to update `varis.json`.
 

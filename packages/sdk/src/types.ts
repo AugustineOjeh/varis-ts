@@ -20,16 +20,26 @@ export interface ServiceDefinition {
   service_type: ServiceType;
   /** At least one category slug from the platform's closed list. Categories tell agents what domain the service covers. */
   categories: ServiceCategory[];
-  /** Must be HTTPS and publicly reachable, with no query string. */
-  endpoint_url: string;
+  /**
+   * The full URL Varis calls. HTTPS, publicly reachable, no query string.
+   * Set this or `path`, not both. Use it when the service lives somewhere
+   * other than `base_url` in varis.json.
+   */
+  endpoint_url?: string;
+  /**
+   * The service's path, joined to `base_url` in varis.json to make
+   * `endpoint_url`, for example "/v1/weather". Set this or `endpoint_url`,
+   * not both.
+   */
+  path?: `/${string}`;
   /**
    * How the gateway calls `endpoint_url`. Defaults to "GET", which needs a
    * flat `Input`. Use "POST" for nested input, or for input that shouldn't
    * appear in access logs.
    */
   method?: ServiceMethod;
-  /** Price per request, in US cents. Zero makes the service free. */
-  price_cents: number;
+  /** Price per request, in US cents. Defaults to 0, which makes the service free. */
+  price_cents?: number;
   /** Recorded, not resolved. Defaults to "1.0.0". */
   version?: string;
   /** Defaults to "published". */

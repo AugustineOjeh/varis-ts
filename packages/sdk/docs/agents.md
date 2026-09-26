@@ -42,11 +42,29 @@ new Varis().services.define<Input, Output>({
   description: "Returns temperature and rainfall ranges for any city.",
   service_type: "data",
   categories: ["science"],
-  endpoint_url: "https://api.example.com/v1/weather",
-  method: "GET",
+  path: "/v1/weather",
   price_cents: 3,
 });
 ```
+
+Only the first five fields are required. Every other field has a default,
+and `varis build` writes the default into `varis.json`, so leave a field out
+unless you need a different value.
+
+## Say where the service lives
+
+Give each service a `path` or an `endpoint_url`, not both.
+
+- **`path`** is joined to `base_url` in `varis.json`. Use it for services on
+  your main API. `base_url` is your production address, for example
+  `"https://api.example.com"`, and `varis init` asks for it. If it's missing,
+  ask the developer for their production URL and add it to `varis.json`.
+  Never set it to a local or staging address.
+- **`endpoint_url`** is the full URL, used as written. Use it for a service
+  that lives on another host.
+
+Either way the result must be HTTPS, publicly reachable, and have no query
+string. `varis build` fails with the file and line if it isn't.
 
 - `Input` is what callers send. `Output` is what the endpoint returns. Both
   become JSON Schemas, and the endpoint must match them exactly. A response
@@ -152,8 +170,9 @@ Varis caller may see, and never serve one user's private data to it.
 - **Write every field value as a literal**: strings, numbers, booleans, and
   arrays of those. Never use variables, constants, template literals with
   `${}`, function calls, or `process.env`. `varis build` doesn't run the code,
-  so those have no value. If the endpoint URL differs between environments, use
-  the production URL.
+  so those have no value. Use `path`, which `varis build` joins to the
+  production `base_url` in `varis.json`, rather than building a URL from an
+  environment value.
 - **Pass both type arguments**: `define<Input, Output>(...)`.
 - **Make `Input` an object type.** For a `GET` service, keep it flat; see
   "Choose the method".
@@ -164,8 +183,8 @@ Varis caller may see, and never serve one user's private data to it.
   `any`, or `unknown`. Represent a date as an ISO 8601 string.
 - **Keep every `slug` unique** in the project. Never change an existing slug; it
   is permanent. To replace a service, define a new slug.
-- **Set `price_cents` in US cents.** `3` means three cents per call. `0` makes
-  the service free.
+- **Set `price_cents` in US cents.** `3` means three cents per call. Leave it
+  out, or set `0`, for a free service.
 - **Use only the public API**: `Varis`, `services.define`, `verifyRequest`,
   `VarisKeyFetchError`, and the exported types `ServiceDefinition`,
   `ServiceType`, `ServiceMethod`, `ServiceStatus`, and `VarisOptions`.
@@ -179,9 +198,10 @@ Varis caller may see, and never serve one user's private data to it.
 | `description` | Yes | At least 20 characters. Say what the service returns and when to use it. |
 | `service_type` | Yes | `data`, `content`, `tool`, `skill`, `compute`, `memory`, `storage`, `model`, or `messaging`. |
 | `categories` | Yes | At least one category slug. |
-| `endpoint_url` | Yes | HTTPS and publicly reachable, with no query string. |
+| `path` | One of these | Starts with `/`. Joined to `base_url` in `varis.json`. |
+| `endpoint_url` | One of these | The full URL: HTTPS, publicly reachable, no query string. |
 | `method` | No | `GET` or `POST`. Defaults to `GET`, which needs a flat `Input`. |
-| `price_cents` | Yes | Non-negative integer, in US cents. |
+| `price_cents` | No | Non-negative integer, in US cents. Defaults to `0`, free. |
 | `version` | No | Defaults to `1.0.0`. |
 | `status` | No | `draft`, `published`, or `disabled`. Defaults to `published`. |
 
@@ -201,6 +221,7 @@ developer asks you to.
 
 - Edit the `services` list in `varis.json` by hand. `varis build` owns it.
 - Change `owner_id` in `varis.json`.
+- Point `base_url` in `varis.json` at a local or staging address.
 - Put tokens, keys, or other secrets in `varis.json` or in a `define` call.
 - Wrap `define` in a helper that builds the definition from variables. The
   build can't read it.

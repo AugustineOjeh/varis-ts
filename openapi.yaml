@@ -1495,7 +1495,6 @@ components:
         - endpoint_url
         - input_schema
         - output_schema
-        - price_cents
       properties:
         slug:
           type: string
@@ -1561,11 +1560,12 @@ components:
           minimum: 0
           description: |
             Charged per request, in US cents. An integer, as with every
-            financial API. Zero makes the service free.
+            financial API. Defaults to 0, which makes the service free.
 
             Varis settles internally in credits at 100 credits per cent, which
             is why fees and discounts on a one cent call still reconcile
             exactly.
+          default: 0
           example: 3
         version:
           type: string
