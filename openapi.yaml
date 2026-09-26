@@ -58,8 +58,9 @@ info:
 
     - An **agent key** (`var_ak_`) invokes services and spends credits against
       its owner's balance.
-    - A **developer API key** (`var_sk_`) publishes and updates services and
-      reads your own transactions. It never invokes and never spends.
+    - A **device token** (`var_dt_`) identifies a developer signed in with
+      `varis login`. Sent with `X-Varis-Owner-Identifier`, it publishes and
+      updates that owner's services. It never invokes and never spends.
 
     Sending the wrong credential type is a `403`, not a `401`. The credential
     is valid; it is not permitted for that operation.
@@ -88,7 +89,7 @@ servers:
 #
 # A LIST of entries means OR: any one of them works. SEVERAL SCHEMES INSIDE ONE
 # entry means AND: all of them must be sent. The developer credential is the
-# second case, because an access token without an owner identifier does not say
+# second case, because a device token without an owner identifier does not say
 # what to act on.
 # -----------------------------------------------------------------------------
 security:
@@ -357,7 +358,7 @@ paths:
       # AND: the bearer token says who, the owner identifier says for whom.
       security:
         - agentKey: []
-        - developerAccessToken: []
+        - deviceToken: []
           developerOwner: []
       # Query-string parameters. `in: query` puts them after the ?; `in: header`
       # makes them headers; `in: path` fills a {placeholder} in the URL.
@@ -477,7 +478,7 @@ paths:
         person.
       tags: [Services]
       security:
-        - developerAccessToken: []
+        - deviceToken: []
           developerOwner: []
       requestBody:
         required: true
@@ -559,7 +560,7 @@ paths:
       tags: [Services]
       security:
         - agentKey: []
-        - developerAccessToken: []
+        - deviceToken: []
           developerOwner: []
       responses:
         "200":
@@ -589,7 +590,7 @@ paths:
         service.
       tags: [Services]
       security:
-        - developerAccessToken: []
+        - deviceToken: []
           developerOwner: []
       requestBody:
         required: true
@@ -769,7 +770,7 @@ components:
   # How callers authenticate. Referenced by name from every `security:` key.
   #
   # Both credentials are bearer tokens. An agent carries a key it was issued.
-  # A developer carries the access token from `varis login`, plus the owner
+  # A developer carries the device token from `varis login`, plus the owner
   # `varis init` wrote into varis.json: the token proves who they are, the
   # owner says which workspace they are acting for, and the server checks the
   # membership joining the two.
@@ -777,7 +778,7 @@ components:
   # OpenAPI cannot express "bearer token starting with var_ak_", so the two
   # schemes look identical to a generator and the distinction lives in the
   # descriptions and in your handler. The server tells them apart by the token
-  # itself: an agent key is prefixed, an access token is a JWT.
+  # itself: an agent key starts var_ak_, a device token var_dt_.
   # ---------------------------------------------------------------------------
   securitySchemes:
     agentKey:
@@ -787,19 +788,21 @@ components:
       type: http
       scheme: bearer
       description: An agent key, prefixed `var_ak_`. Invokes and spends.
-    developerAccessToken:
+    deviceToken:
       type: http
       scheme: bearer
       description: |
-        The access token `varis login` stored on the developer's machine.
-        Identifies the human; carries no permissions of its own.
+        A device token, prefixed `var_dt_`, issued by `varis login` to one
+        machine and stored there. Identifies the human; carries no permissions
+        of its own. Expires 180 days after its last use, and can be revoked
+        from the dashboard.
     developerOwner:
       type: apiKey
       in: header
       name: X-Varis-Owner-Identifier
       description: |
         The owner the developer is acting for, from varis.json. Only accepted
-        when the access token's user is a member of it.
+        when the device token's user is a member of it.
 
   # ---------------------------------------------------------------------------
   # Reusable REQUEST parameters. Referenced from an operation's `parameters:`.
