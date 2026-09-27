@@ -72,6 +72,9 @@ string. `varis build` fails with the file and line if it isn't.
   charged.
 - Add a doc comment to every field of `Input`. Agents calling the service read
   it to decide what to send.
+- For a service that takes no input, write `define<void, Output>`. `void`,
+  `undefined`, `never`, and `{}` all build to an empty input schema. A `GET`
+  service then gets no query string, and a `POST` service the body `{}`.
 
 ## Choose the method
 
@@ -180,8 +183,8 @@ Varis caller may see, and never serve one user's private data to it.
   production `base_url` in `varis.json`, rather than building a URL from an
   environment value.
 - **Pass both type arguments**: `define<Input, Output>(...)`.
-- **Make `Input` an object type.** For a `GET` service, keep it flat; see
-  "Choose the method".
+- **Make `Input` an object type**, or `void` for no input. For a `GET`
+  service, keep it flat; see "Choose the method".
 - **Use only these types** in `Input` and `Output`: `string`, `number`,
   `boolean`, `null`, string or number literals and unions of them, arrays,
   objects and interfaces, optional fields, `Record<string, T>`, and unions of

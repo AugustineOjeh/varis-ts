@@ -520,6 +520,47 @@ ${fields("dated")}
     expect(error!.message).toContain("Output.at: Dates aren't JSON");
   });
 
+  it("treats a void, undefined, or never Input as no input, like {}", () => {
+    const dir = makeProject({
+      "src/route.ts": `
+import { Varis } from "@usevaris/sdk";
+const varis = new Varis();
+varis.services.define<void, { ok: boolean }>({
+${fields("void-input")}
+});
+varis.services.define<undefined, { ok: boolean }>({
+${fields("undefined-input")}
+});
+varis.services.define<never, { ok: boolean }>({
+${fields("never-input")}
+});
+varis.services.define<{}, { ok: boolean }>({
+${fields("empty-input", { method: `"POST"` })}
+});`,
+    });
+
+    build(dir);
+    const services = readManifest(dir).services;
+    expect(services).toHaveLength(4);
+    for (const service of services) {
+      expect(service.input_schema).toEqual({ type: "object", properties: {} });
+    }
+  });
+
+  it("still rejects void as an Output", () => {
+    const dir = makeProject({
+      "src/route.ts": `
+import { Varis } from "@usevaris/sdk";
+new Varis().services.define<void, void>({
+${fields("void-output")}
+});`,
+    });
+
+    const errors = buildErrors(dir);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.message).toContain("Output has type void");
+  });
+
   it("fails when Input isn't an object", () => {
     const dir = makeProject({
       "src/route.ts": `

@@ -36,7 +36,10 @@
  *
  * INPUT MUST BE AN OBJECT
  * Agents send arguments by name, so `Input` has to convert to
- * `{ type: "object" }`. `Output` can be any supported type.
+ * `{ type: "object" }`. `Output` can be any supported type. The one
+ * exception: an `Input` of `void`, `undefined`, or `never` means the service
+ * takes no input, and converts to `{ type: "object", properties: {} }`, the
+ * same as `{}`. As an `Output`, they are still rejected.
  *
  * HOW ERRORS FLOW
  * Deep inside the recursion, a bad type throws the private `Unsupported`
@@ -146,7 +149,9 @@ export function convertSchemas(
   ];
   // Convert both before returning, so errors from both show up in one run.
   // The labels start the error path, like "Input.user.name".
-  const input = convertAt(inputNode, "Input", checker, errors);
+  const input = isNoInput(checker.getTypeFromTypeNode(inputNode))
+    ? noInputSchema()
+    : convertAt(inputNode, "Input", checker, errors);
   const output = convertAt(outputNode, "Output", checker, errors);
 
   // Input converted fine, but to something other than an object, for
@@ -163,6 +168,26 @@ export function convertSchemas(
   if (!input || !output) return undefined;
 
   return { input_schema: input, output_schema: output };
+}
+
+/**
+ * True when `Input` says "this service takes no input": `void`, `undefined`,
+ * or `never`. These have no JSON Schema of their own, but as an Input they
+ * mean one thing, so they become the same schema as `{}`. `void` is what
+ * most developers write for a function with no arguments.
+ */
+function isNoInput(type: ts.Type): boolean {
+  return (type.flags &
+    (ts.TypeFlags.Void | ts.TypeFlags.Undefined | ts.TypeFlags.Never)) !== 0;
+}
+
+/**
+ * An object with no properties: what `{}` converts to. Agents send
+ * `"input": {}`, or leave input out, which the gateway treats as `{}`. A GET
+ * service gets no query string, and a POST service the body `{}`.
+ */
+function noInputSchema(): JsonSchema {
+  return { type: "object", properties: {} };
 }
 
 /**

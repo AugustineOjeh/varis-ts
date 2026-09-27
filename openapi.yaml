@@ -166,7 +166,7 @@ paths:
               type: object
               # Fields the caller MUST send. Everything else is optional.
               # Generators mark non-required fields as optional in TypeScript.
-              required: [service_id, input]
+              required: [service_id]
               properties:
                 service_id:
                   type: string
@@ -179,7 +179,10 @@ paths:
                     Passed to the provider unchanged. Must validate against the
                     service's `input_schema`. A malformed input fails the
                     invocation without calling the provider and without
-                    creating a transaction.
+                    creating a transaction. Leave it out for a service that
+                    takes no input: a missing input is treated as `{}`, and
+                    still has to pass the schema, so a service with required
+                    fields rejects it.
                   # Allows arbitrary keys. Without this, a strict validator
                   # rejects anything not listed under `properties`, and here
                   # the shape is defined by the service, not by Varis.
