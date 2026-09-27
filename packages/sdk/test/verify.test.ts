@@ -351,3 +351,121 @@ describe("Varis.verifyRequest", () => {
     );
   });
 });
+
+describe("varis test requests", () => {
+  const LOOPBACK = "http://127.0.0.1:47823/varis-test-key";
+  const TEST_ID = "var_tst_req_4f0c2b8e";
+
+  /**
+   * Stands in for the CLI's loopback listener: answers with the throwaway
+   * key only for `servedId`. Everything else fails, as a closed port would.
+   */
+  function cliListening(key: TestKey, servedId = TEST_ID) {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      if (`${url.origin}${url.pathname}` !== LOOPBACK) {
+        throw new TypeError("fetch failed");
+      }
+      if (url.searchParams.get("request_id") !== servedId) {
+        return new Response("unknown request", { status: 404 });
+      }
+      return Response.json(key.publicKey);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  const testHeaders = (id = TEST_ID) => ({ "x-varis-request-id": id });
+
+  it("accepts a test request when the CLI on this machine vouches for it", async () => {
+    const key = await makeKey("varis-test");
+    const fetchMock = cliListening(key);
+    const request = await signedRequest(key, BODY, { headers: testHeaders() });
+
+    expect(await new Varis().verifyRequest(request)).toBe(true);
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      `${LOOPBACK}?request_id=${TEST_ID}`,
+    );
+  });
+
+  it("rejects a test request when nothing listens, as in production, without throwing", async () => {
+    const key = await makeKey("varis-test");
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new TypeError("connect ECONNREFUSED 127.0.0.1:47823");
+    }));
+    const request = await signedRequest(key, BODY, { headers: testHeaders() });
+
+    await expect(new Varis().verifyRequest(request)).resolves.toBe(false);
+  });
+
+  it("rejects a tampered test request", async () => {
+    const key = await makeKey("varis-test");
+    cliListening(key);
+    const signed = await signedRequest(key, BODY, { headers: testHeaders() });
+    const tampered = new Request(signed.url, {
+      method: "POST",
+      headers: signed.headers,
+      body: BODY.replace("Lagos", "Abuja"),
+    });
+
+    expect(await new Varis().verifyRequest(tampered)).toBe(false);
+  });
+
+  it("rejects a test signature the CLI didn't make", async () => {
+    const served = await makeKey("varis-test");
+    const forger = await makeKey("varis-test");
+    cliListening(served);
+    const request = await signedRequest(forger, BODY, { headers: testHeaders() });
+
+    expect(await new Varis().verifyRequest(request)).toBe(false);
+  });
+
+  it("rejects a test key without a test request ID", async () => {
+    const key = await makeKey("varis-test");
+    const fetchMock = cliListening(key);
+    const request = await signedRequest(key, BODY, {
+      headers: { "x-varis-request-id": "var_req_4f0c2b8e" },
+    });
+
+    expect(await new Varis().verifyRequest(request)).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a test request ID under a production key", async () => {
+    const key = await makeKey("k1");
+    serveKeys([key.publicKey]);
+    const request = await signedRequest(key, BODY, { headers: testHeaders() });
+
+    expect(await new Varis().verifyRequest(request)).toBe(false);
+  });
+
+  it("only takes the key the CLI serves for this request ID", async () => {
+    const key = await makeKey("varis-test");
+    cliListening(key, "var_tst_req_someone_else");
+    const request = await signedRequest(key, BODY, { headers: testHeaders() });
+
+    expect(await new Varis().verifyRequest(request)).toBe(false);
+  });
+
+  it("verifies a GET test request with its query", async () => {
+    const key = await makeKey("varis-test");
+    cliListening(key);
+    const request = await signedRequest(key, "", {
+      method: "GET",
+      url: "http://localhost:3000/v1/weather?city=Port+Harcourt",
+      headers: testHeaders(),
+    });
+
+    expect(await new Varis().verifyRequest(request)).toBe(true);
+  });
+
+  it("still verifies gateway requests with their own request ID", async () => {
+    const key = await makeKey("k1");
+    serveKeys([key.publicKey]);
+    const request = await signedRequest(key, BODY, {
+      headers: { "x-varis-request-id": "var_req_4f0c2b8e" },
+    });
+
+    expect(await new Varis().verifyRequest(request)).toBe(true);
+  });
+});

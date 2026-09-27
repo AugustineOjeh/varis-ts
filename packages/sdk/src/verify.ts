@@ -17,6 +17,16 @@
  * Public keys come from VARIS_SIGNING_KEYS_URL as
  * `{ "keys": [{ "kid", "public_key_pem" }] }`, where the PEM is SPKI.
  *
+ * TEST REQUESTS
+ * `varis test` calls the developer's own server before they publish. It
+ * signs with a throwaway key under the key ID `varis-test`, sends a request
+ * ID prefixed `var_tst_req_`, and serves the public key on the developer's
+ * loopback (LOCAL_TEST_KEY_URL), only for that request ID. A test request is
+ * verified with that key, through the same signed string as a real one. The
+ * two markers must agree, and in production nothing answers on the
+ * loopback, so a test request is always false there. The developer does
+ * nothing: no option, no environment variable.
+ *
  * ERROR MODEL
  * Anything wrong with the request itself returns false. Only a failure to
  * load the keys throws (`VarisKeyFetchError`), because that is the
@@ -25,7 +35,12 @@
  * Web APIs only: no `node:` imports, so this runs on Node, Deno, Bun, and
  * Cloudflare Workers.
  */
-import { VARIS_SIGNING_KEYS_URL } from "./constants.js";
+import {
+  LOCAL_TEST_KEY_URL,
+  TEST_KEY_ID,
+  TEST_REQUEST_ID_PREFIX,
+  VARIS_SIGNING_KEYS_URL,
+} from "./constants.js";
 
 /** One public key, in the shape the signing keys endpoint returns. */
 export interface VarisPublicKey {
@@ -98,7 +113,19 @@ export class RequestVerifier {
     // Read a clone, so the caller can still read the original body.
     const body = new Uint8Array(await request.clone().arrayBuffer());
 
-    const key = await this.#key(kid);
+    // A test request carries both markers; a gateway request carries
+    // neither. The request ID isn't signed, so it only routes and
+    // cross-checks: the signature, against a key only the local CLI holds,
+    // is what proves the request.
+    const requestId = request.headers.get("x-varis-request-id") ?? "";
+    const isTestKey = kid === TEST_KEY_ID;
+    if (isTestKey !== requestId.startsWith(TEST_REQUEST_ID_PREFIX)) {
+      return false;
+    }
+
+    const key = isTestKey
+      ? await fetchLocalTestKey(requestId)
+      : await this.#key(kid);
     if (!key) return false;
 
     // The signed bytes are UTF-8
@@ -183,6 +210,34 @@ export class RequestVerifier {
     }
     this.#keys = keys;
     this.#loaded = true;
+  }
+}
+
+/**
+ * The public key a local `varis test` run serves for `requestId`, or
+ * undefined when none answers. Never throws: in production nothing listens
+ * on the loopback, and that simply means the request isn't a genuine test.
+ * Only ever this one fixed address, with a short timeout and no redirects,
+ * so a forged request can't steer where it fetches from.
+ */
+async function fetchLocalTestKey(requestId: string): Promise<CryptoKey | undefined> {
+  try {
+    const response = await fetch(
+      `${LOCAL_TEST_KEY_URL}?request_id=${encodeURIComponent(requestId)}`,
+      {
+        headers: { accept: "application/json" },
+        redirect: "error",
+        signal: AbortSignal.timeout(1_000),
+      },
+    );
+    if (!response.ok) return undefined;
+    const body = await response.json() as Partial<VarisPublicKey> | null;
+    if (body?.kid !== TEST_KEY_ID || typeof body.public_key_pem !== "string") {
+      return undefined;
+    }
+    return await importPublicKey(body.public_key_pem);
+  } catch {
+    return undefined;
   }
 }
 

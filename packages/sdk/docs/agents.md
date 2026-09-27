@@ -160,6 +160,12 @@ Varis caller may see, and never serve one user's private data to it.
   fine.
 - `verifyRequest` returns `false` for unsigned, expired, or tampered requests.
   It doesn't throw for them.
+- `varis test` requests need nothing extra. `verifyRequest` recognises them
+  and checks them with a key from the `varis test` run on the same machine,
+  and rejects them anywhere else, including production. Their request IDs,
+  in `X-Varis-Request-Id`, start with `var_tst_req_`; real calls start with
+  `var_req_`. Never add code that skips verification for tests or for
+  localhost.
 - If the developer runs Varis locally, `new Varis({ keysUrl })` fetches keys
   from another URL, and `new Varis({ publicKeys })` uses fixed keys without
   fetching. Don't set either option in production code unless the developer
