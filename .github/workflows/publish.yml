@@ -1,0 +1,96 @@
+# Publishes @usevaris/sdk and @usevaris/build to npm when a version tag is
+# pushed.
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Both packages always share one version, taken from the tag and stamped
+# into their package.json files here, so there's nothing to bump by hand.
+# A tag with a suffix, such as v0.2.0-rc.0, publishes under npm's `next`
+# tag, so `npm install @usevaris/sdk` and the CLI's
+# `npx @usevaris/build@0` never pick it up. Everything else publishes as
+# `latest`.
+#
+# No npm token is stored anywhere. npm's trusted publishing accepts this
+# workflow, identified by GitHub's OIDC token (hence `id-token: write`), and
+# attaches provenance to each version: a signed record of the commit and
+# workflow that built it, shown on the package's npm page. Each package's
+# trusted publisher is set on npmjs.com, under the package's Settings:
+# organisation usevaris, repository varis-ts, workflow publish.yml.
+
+name: Publish
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # The full history, so the on-main check can see main.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Read the version from the tag
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::The tag $TAG isn't a version. Use v1.2.3, or v1.2.3-rc.0 for a pre-release."
+            exit 1
+          fi
+          version="${TAG#v}"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          if [[ "$version" == *-* ]]; then
+            echo "dist_tag=next" >>"$GITHUB_OUTPUT"
+          else
+            echo "dist_tag=latest" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Check the tagged commit is on main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::The tag points at a commit that isn't on main. Merge first, then tag main."
+            exit 1
+          fi
+
+      # Node 24 bundles an npm new enough for trusted publishing (11.5.1 or
+      # later); the step below checks rather than assumes.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Check npm supports trusted publishing
+        run: |
+          npm --version
+          [ "$(printf '%s\n11.5.1\n' "$(npm --version)" | sort -V | head -1)" = "11.5.1" ]
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+      - name: Stamp the version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          npm version "$VERSION" --no-git-tag-version --workspace packages/sdk --workspace packages/build
+          grep "\"version\": \"$VERSION\"" packages/sdk/package.json packages/build/package.json
+
+      # prepack builds each package, so what's published is built from this
+      # commit, not from anything left in dist.
+      - name: Publish
+        env:
+          DIST_TAG: ${{ steps.version.outputs.dist_tag }}
+        run: npm publish --workspace packages/sdk --workspace packages/build --access public --tag "$DIST_TAG"

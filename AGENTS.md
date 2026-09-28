@@ -49,6 +49,18 @@ Run these from the repository root:
 To work on one package, add `--workspace packages/sdk` or
 `--workspace packages/build`.
 
+## Releasing
+
+Merge to `main`, then tag the merged commit and push the tag:
+`git tag v0.1.0 && git push origin v0.1.0`. `.github/workflows/publish.yml`
+checks the tag is a version on `main`, runs the type check and tests, stamps
+the version into both packages, and publishes both to npm through trusted
+publishing, with provenance. A tag like `v0.2.0-rc.0` publishes under npm's
+`next` tag, which neither `npm install` nor the CLI's `npx @usevaris/build@0`
+picks up. Both packages always share one version. Never bump the versions in
+`package.json` by hand. `.github/workflows/check.yml` runs the type check and
+tests on every pull request.
+
 ## Rules
 
 ### Tooling
