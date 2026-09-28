@@ -29,7 +29,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AugustineOjeh/varis-ts.git",
+    "url": "git+https://github.com/usevaris/varis-ts.git",
     "directory": "packages/sdk"
   }
 }
