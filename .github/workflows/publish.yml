@@ -85,7 +85,9 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          npm version "$VERSION" --no-git-tag-version --workspace packages/sdk --workspace packages/build
+          # --allow-same-version: the files may already say this version,
+          # which npm otherwise refuses as "Version not changed".
+          npm version "$VERSION" --no-git-tag-version --allow-same-version --workspace packages/sdk --workspace packages/build
           grep "\"version\": \"$VERSION\"" packages/sdk/package.json packages/build/package.json
 
       # prepack builds each package, so what's published is built from this
